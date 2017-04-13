@@ -80,7 +80,7 @@ def cdisp(name, F, V, auto=True):
     return img
 
 # Recording tools
-record = True
+record = False
 if record: recorder = cv2.VideoWriter('quantum.avi', cv2.cv.CV_FOURCC(*'XVID'), fps, imshow_size)
 
 # Simulation
