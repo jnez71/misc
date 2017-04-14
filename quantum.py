@@ -106,7 +106,10 @@ while True:
 
     # Regulate sim speed
     elapsed = time.time() - start
-    if elapsed < dt and not speed_flag:
-        print("Nice computer! You're running faster than realtime. Use a bigger grid!")
-        speed_flag = True
+    if elapsed < dt:
+        if not speed_flag:
+            print("Nice computer!")
+            print("You can run {} times faster than realtime.".format(np.round(dt/elapsed, 4)))
+            print("Try using that excess performance by simulating over a larger grid.\n")
+            speed_flag = True
         time.sleep(dt - elapsed)
