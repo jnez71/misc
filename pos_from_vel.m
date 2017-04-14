@@ -72,7 +72,3 @@ title('estimation erros');
 
 rms_position_error = rms(x(:,1)-xhat(:,1))
 rms_velocity_error = rms(x(:,2)-xhat(:,2))
-
-
-
-
