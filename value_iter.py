@@ -48,4 +48,4 @@ V = V - V[0] - 1
 print("Finished in {} of {} iterations.".format(i+1, imax))
 print("Optimal Policy: {}".format(U))
 print("Optimal Expected Value Function: {}".format(np.round(V, 3)))
-print("Optimal Average Cost: {}".format(np.round(eta, 3)))
+print("Optimal Average Cost: {}\n".format(np.round(eta, 3)))
