@@ -13,10 +13,7 @@ from matplotlib import cm as colormap
 from mpl_toolkits.mplot3d import Axes3D
 
 # State, action, measurement, and time cardinalities
-nS = 3
-nA = 2
-nM = 2
-nT = int(2E4)
+nS = 3; nA = 2; nM = 2; nT = int(1E5)
 
 # Process Model: transition conditional-probability matrix, nA by nS by nS'
 P = np.array([[[  1,   0,   0],
@@ -40,51 +37,56 @@ g = 0.8
 C = np.array([[-1, -1, -3],
               [ 0,  0, -2]], dtype=np.float64)
 
-# Q-learning basis-form and learning-rate structure
-basis = "linear"  # "linear", "quadratic", or "radial"
-gain_type = "kalman"  # "static", "decay", "kalman"
+# Q-approximation basis choice...
+basis = "planar"
 
-# Q approximation function: linear + offset
-if basis == "linear":
-    nF = 5
-    def F(b, u):
-        f = [b[0], b[1]]
-        if u == 1: return np.concatenate((f, np.zeros_like(f), [1]))
-        return np.concatenate((np.zeros_like(f), f, [0]))
+# ...planar
+if basis == "planar":
+    nF = 8
+    def F(b, y, u):
+        f = np.zeros(nF)
+        if y == 0:
+            f[0] = b[0]
+            f[1] = b[0]*u
+            f[2] = b[2]
+            f[3] = b[2]*u
+            f[4] = u
+        else:
+            f[5] = b[2]
+            f[6] = u
+        f[7] = 1
+        return f
 
-# Q approximation function: quadratic (but no cross terms) + offset
-elif basis == "quadratic":
-    nF = 9
-    def F(b, u):
-        f = [b[0], b[0]**2, b[1], b[1]**2]
-        if u == 1: return np.concatenate((f, np.zeros_like(f), [1]))
-        return np.concatenate((np.zeros_like(f), f, [0]))
-
-# Q approximation function: radial (with centers z in Z) + offset
+# ...or radial
 elif basis == "radial":
     Z = np.array([[0.8, 0.1],
-                  [0.1, 0.1]])
-    nF = 2*len(Z)+1
-    def F(b, u):
-        f = np.exp(-npl.norm(Z - [b[0], b[1]], axis=1)/2)
-        f = f / np.sum(f)
-        if u == 1: return np.concatenate((f, np.zeros_like(f), [1]))
-        return np.concatenate((np.zeros_like(f), f, [0]))
+                  [0.1, 0.1],
+                  [0.1, 0.8]])
+    nF = 2*len(Z)+3
+    def F(b, y, u):
+        f = np.zeros(nF)
+        if y == 0:
+            f[:len(Z)] = np.exp(-npl.norm(Z - [b[0], b[2]], axis=1)/2)
+            f[len(Z):2*len(Z)] = u*f[:len(Z)]
+        else:
+            f[-3:-1] = (b[2], u)
+        f[-1] = 1
+        return f
 
-# State, measurement, belief, cost, and parametric-Q histories
+# State, measurement, belief, and parametric-Q histories
 x = np.zeros(nT, dtype=np.int64)
 y = np.zeros(nT, dtype=np.int64)
 b = np.zeros((nT, nS), dtype=np.float64)
-c = np.zeros(nT, dtype=np.float64)
 f = np.zeros((nT, nF), dtype=np.float64)
 q = np.zeros((nT, nF), dtype=np.float64)
 
 # Initial conditions
+u = 0
 x[0] = 0
 b[0] = [1/3, 1/3, 1/3]
-f[0] = F(b[0], 0)
-q[0] = 200*(np.random.rand(nF)-0.5)
-K = np.eye(nF)
+f[0] = F(b[0], 0, u)
+q[0] = 20*(np.random.rand(nF)-0.5)
+Ksum = np.zeros((nF, nF))
 
 # Function for randomly sampling with a given discrete probability density
 sample_from = lambda p: np.argwhere(np.random.sample() < np.cumsum(p))[0][0]
@@ -93,9 +95,8 @@ sample_from = lambda p: np.argwhere(np.random.sample() < np.cumsum(p))[0][0]
 T = np.arange(nT)
 for t in T[1:]:
 
-    # Randomly choose action, accept true cost
-    u = sample_from([0.5, 0.5])
-    c[t] = C[u, x[t-1]]
+    # Randomly choose next action
+    ut = sample_from([0.5, 0.5])
 
     # Advance state, obtain measurement
     x[t] = sample_from(P[u, x[t-1]])
@@ -105,27 +106,27 @@ for t in T[1:]:
     b[t] = (b[t-1].dot(P[u]))*R[u, :, y[t]]
     b[t] = b[t] / np.sum(b[t])
 
-    # Approximate Bellman error and jacobian
-    f_a = np.array([F(b[t], a) for a in xrange(nA)])
+    # Approximate error and jacobian
+    f_a = np.array([F(b[t], y[t], a) for a in xrange(nA)])
     E = b[t-1].dot(C[u]) + g*np.min(f_a.dot(q[t-1])) - f[t-1].dot(q[t-1])
-    K = ((t-1)*K + np.outer(f[t-1], f[t-1]))/t
+    Ksum = Ksum + np.outer(f_a[ut], f_a[ut])
 
     # Update Q approximation
-    if gain_type == "static":
+    condition = npl.cond(Ksum)
+    if condition < 10000:
+        q[t] = q[t-1] + (1/t)*npl.inv(Ksum/t).dot(E*f[t-1])
+    else:
         q[t] = q[t-1] + 0.001*E*f[t-1]
-    elif gain_type == "decay":
-        q[t] = q[t-1] + (100/t)*E*f[t-1]
-    elif gain_type == "kalman":
-        q[t] = q[t-1] + 0.001*npl.pinv(K).dot(E*f[t-1])
-    f[t] = f_a[u]
+    f[t] = f_a[ut]
+    u = ut
 
     # Heartbeat
     if t % int(nT/10) == 0:
         print("Progress: {}%".format(int(100*t/nT)))
-        print("Bellman Error: {}".format(np.round(E, 3)))
-        print("Eigs: {}\n".format(np.round(npl.eigvals(K), 3)))
+        print("Error: {}".format(np.round(E, 3)))
+        print("Eigs: {}".format(np.round(npl.eigvals(Ksum/t), 3)))
+        print("Condition: {}\n".format(condition))
 print("Final q: {}".format(np.round(q[-1], 3)))
-np.save("q", q[-1])
 
 # Compute discretized final Q function
 res = 81
@@ -137,7 +138,7 @@ B[:, 2] = 1 - np.sum(B, axis=1)
 Q = np.zeros((nA, len(B)))
 for a in xrange(nA):
     for i, bi in enumerate(B):
-        Q[a, i] = F(bi, a).dot(q[-1])
+        Q[a, i] = F(bi, 0, a).dot(q[-1])
 U = np.argmin(Q, axis=0)
 V = np.min(Q, axis=0)
 
@@ -152,8 +153,6 @@ dens = int(np.ceil(nT/1000))
 # Plot policy on belief simplex
 ax = fig.add_subplot(nplotsr, nplotsc, 1, projection='3d')
 ax.scatter(B[:, 0], B[:, 1], B[:, 2], c=U, zorder=1)
-try: ax.scatter(Z[:, 0], Z[:, 1], 1-np.sum(Z, axis=1), c='g', s=32, zorder=10)
-except: pass
 ax.set_xlim([0, 1]); ax.set_ylim([0, 1]); ax.set_zlim([0, 1])
 ax.set_title("Policy", fontsize=fontsize)
 ax.set_xlabel("Bottom", fontsize=fontsize)
