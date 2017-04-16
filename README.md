@@ -1,4 +1,4 @@
 # demos
 "For fun and profit."
 
-http://i.imgur.com/rtaCcXe.gifv
+quantum.py: http://i.imgur.com/rtaCcXe.gifv
