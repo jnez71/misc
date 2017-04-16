@@ -49,10 +49,10 @@ y_pred.extend(x)
 
 # Let the "filter" run "autonomously" for samples beyond the ones it trained on
 for i, t in enumerate(np.arange(samples-1, T-1)):
-	filtout = w[0]
-	for d in np.arange(0, M):
-		filtout += w[d+1]*y_pred[t-d]
-	y_pred.append(filtout)
+    filtout = w[0]
+    for d in np.arange(0, M):
+        filtout += w[d+1]*y_pred[t-d]
+    y_pred.append(filtout)
 
 print("MSE: {}".format(np.sqrt(np.mean(np.square(np.subtract(func(time[samples:]), y_pred[samples:]))))))
 
