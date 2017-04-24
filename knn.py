@@ -30,7 +30,7 @@ nu = 1
 ny = 1
 nl = 12
 
-# Initial synapse weight matrices and weight covariance
+# Initial synapse weight matrices
 W = [5*(2*np.random.sample((nl, nu+1))-1),
      5*(2*np.random.sample((ny, nl+1))-1)]
 nW = sum(map(np.size, W))
