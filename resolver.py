@@ -44,7 +44,6 @@ def sense_jac(x):
 # Kalman's knobs
 Q = np.diag([0, 1E-4, 1E-3, 1E-6])
 R = np.array([1])
-Rinv = 1/R
 
 # Time domain
 T = 100  # s
