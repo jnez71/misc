@@ -47,7 +47,7 @@ R = np.array([1])
 
 # Time domain
 T = 100  # s
-dt = 0.005  # s
+dt = 0.01  # s
 t = np.arange(0, T, dt)  # s
 i_per_y = int(1/(y_per_t*dt))  # iters/sample
 
