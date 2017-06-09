@@ -39,7 +39,7 @@ def dynamic_jac(x, u, dt):
                      [0,     0,     0, 0],
                      [0,     0,     0, 0]])*dt + np.eye(4)
 def sense_jac(x):
-    return np.array([[res, 0, 0, 0]])  # good enough!
+    return np.array([[res, 0, 0, 0]])  # this is a better linear model than dh/dx=0
 
 # Kalman's knobs
 Q = np.diag([0, 1E-4, 1E-3, 1E-6])
