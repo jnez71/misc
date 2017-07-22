@@ -94,4 +94,13 @@ for x, y, z in grid_lines('lat', n-1, R(0, 90, 0)): maya.plot3d(x, y, z, color=g
 maya.title("lat-lat-lat", color=black, height=0.875, size=0.5)
 sphere.draw(gray)
 
+fig5 = maya.figure(5, bgcolor=white, fgcolor=white)
+for x, y, z in grid_lines('lat', n): maya.plot3d(x, y, z, color=black, tube_radius=lr)
+for x, y, z in grid_lines('lon', n): maya.plot3d(x, y, z, color=black, tube_radius=lr)
+for color, incl in zip([red, green, blue], [60, 0, -60]):
+    for i in np.linspace(0, 360, 20):
+        for x, y, z in 1.1*grid_lines('lon', 1, R(0, incl, i)): maya.plot3d(x, y, z, color=color, tube_radius=lr)
+maya.title("SpaceX", color=black, height=0.875, size=0.5)
+sphere.draw(gray)
+
 maya.show()
