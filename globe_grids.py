@@ -3,6 +3,11 @@ Creates various combinations of latitude and longitude lines
 to demonstrate different grid types for globes. (This requires
 the MayaVi visualization library).
 
+The last scene crudely shows what SpaceX's satellite constellation
+*may* look like. Altitudes are to scale, but satellite bodies are
+exaggerated for visibility. Data was found here:
+https://cdn3.vox-cdn.com/uploads/chorus_asset/file/8174403/SpaceX_Application_-.0.pdf
+
 """
 from __future__ import division
 import numpy as np; npl = np.linalg
@@ -95,11 +100,13 @@ maya.title("lat-lat-lat", color=black, height=0.875, size=0.5)
 sphere.draw(gray)
 
 fig5 = maya.figure(5, bgcolor=white, fgcolor=white)
-for x, y, z in grid_lines('lat', n): maya.plot3d(x, y, z, color=black, tube_radius=lr)
-for x, y, z in grid_lines('lon', n): maya.plot3d(x, y, z, color=black, tube_radius=lr)
-for color, incl in zip([red, green, blue], [60, 0, -60]):
-    for i in np.linspace(0, 360, 20):
-        for x, y, z in 1.1*grid_lines('lon', 1, R(0, incl, i)): maya.plot3d(x, y, z, color=color, tube_radius=lr)
+for x, y, z in grid_lines('lat', n): maya.plot3d(x, y, z, color=black, tube_radius=lr/5)
+for x, y, z in grid_lines('lon', n): maya.plot3d(x, y, z, color=black, tube_radius=lr/5)
+for color, incl, dens, alt, num in zip([red, green, blue, (1, 0, 1)], [53, 74, 81, 70], [32, 8, 5, 6], [1110, 1130, 1275, 1325], [50, 50, 75, 75]):
+    for i in np.linspace(0, 360, dens):
+        for x, y, z in (1+alt/6371)*grid_lines('lon', 1, R(0, 90-incl, i)):
+            maya.plot3d(x, y, z, color=color, tube_radius=lr/5)
+            maya.points3d(x[::len(x)//num], y[::len(x)//num], z[::len(x)//num], scale_factor=0.02, color=color)
 maya.title("SpaceX", color=black, height=0.875, size=0.5)
 sphere.draw(gray)
 
