@@ -101,8 +101,8 @@ while True:
     # Increment wave function
     # dFdt = over_j((alph*claplacian(F) + V*F)/hbar) - B*F
     # F = F + dFdt*dt
-    F = cmult(cexp((-1j*dt/hbar)*V-dt*B), F - (hbar*dt/(2*mass))*over_j(claplacian(F)))
-    F = normalize(F)
+    F[:] = cmult(cexp((-1j*dt/hbar)*V-dt*B), F - (hbar*dt/(2*mass))*over_j(claplacian(F)))
+    F[:] = normalize(F)
 
     # Regulate sim speed
     elapsed = time.time() - start
