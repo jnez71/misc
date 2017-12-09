@@ -135,7 +135,7 @@ if fresh_optimization:
     Uopt = np.zeros(N0)
     Qopt = np.zeros((N0, n_q))
     for i in xrange(n_q):
-        Qopt[:, i] = np.linspace(q[i], qN[i]/2, N0)
+        Qopt[:, i] = np.linspace(q[i], qN[i], N0)
     Zopt = np.concatenate((Uopt, Qopt.flatten()))
     opt_grid = np.linspace(0, tN, N0)
 
