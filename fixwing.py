@@ -160,7 +160,7 @@ class FixWing(object):
         self.Cp2 = 0.01*np.array([1, 10, 150], dtype=np.float64)  # N/(m/s)^2
 
         # Center of drag and rotational drag coefficients
-        self.rc = np.array([-0.2, 0, 0], dtype=np.float64)  # m
+        self.rc = np.array([-0.2, 0, 0.15], dtype=np.float64)  # m
         self.Cq = np.array([40, 40, 10], dtype=np.float64)  # N/(rad/s)
 
         # Thrust from throttle ratio
