@@ -1,5 +1,7 @@
 """
 Basic fixed-wing airplane simulator to test out an intuitive model.
+This was a thrown-together messy modification of the software in
+my multicopter repo.
 
 """
 from __future__ import division
@@ -139,6 +141,33 @@ def wind(t):
 
 ###################################################################### MODEL SETUP
 
+class Surface(object):
+    def __init__(self, pc, q0, Cp1, Cp2, Cq, upoint, uaxis, umin, umax, udot):
+        self.pc = pc  # center of pressure in surface coords
+        self.q0 = q0  # initial orientation of surface relative to body
+        self.Cp1 = Cp1
+        self.Cp2 = Cp2
+        self.Cq = Cq
+        self.upoint = upoint  # mounting point in body coords (always surface origin)
+        self.uaxis = uaxis / npl.norm(uaxis)  # axis of joint rotation in body coords
+        self.umin = umin  # minimum joint angle
+        self.umax = umax  # maximum joint angle
+        self.udot = abs(udot)  # maximum deflection rate
+        self.ucmd = 0  # current joint command
+        self.u = 0  # current joint angle
+        self.q = np.copy(self.q0)
+        self.pc_body = self.upoint + rotate_vector(self.q, self.pc)
+
+    def update(self, dt):
+        err = self.ucmd - self.u
+        du = dt*self.udot
+        if abs(err) < du: self.u = self.ucmd
+        elif err > 0: self.u += du
+        else: self.u -= du
+        self.u = np.clip(self.u, self.umin, self.umax)
+        self.q = quaternion_multiply(self.q0, quaternion_from_rotvec(self.u*self.uaxis))
+        self.pc_body = self.upoint + rotate_vector(self.q, self.pc)
+
 class FixWing(object):
     def __init__(self):
         # Total mass
@@ -159,15 +188,55 @@ class FixWing(object):
         self.Cp1 = 0.01*np.array([1, 10, 150], dtype=np.float64)  # N/(m/s)
         self.Cp2 = 0.01*np.array([1, 10, 150], dtype=np.float64)  # N/(m/s)^2
 
-        # Center of drag and rotational drag coefficients
-        self.rc = np.array([-0.2, 0, 0.15], dtype=np.float64)  # m
-        self.Cq = np.array([40, 40, 10], dtype=np.float64)  # N/(rad/s)
+        # Main body center of drag and rotational drag coefficients
+        self.rc = np.array([0, 0, 0], dtype=np.float64)  # m
+        self.Cq = np.array([40, 40, 20], dtype=np.float64)  # N/(rad/s)
 
         # Thrust from throttle ratio
-        self.kthr = 100  # N/eff
+        self.kthr = 80  # N/eff
 
-        # Torque from deflection ratios (constant effectivenesses)
-        self.ktor = np.array([0.3, 1.5, 1], dtype=np.float64)  # N*m/eff
+        # Flight surfaces
+        raileron = Surface(pc=np.array([0, -1, 0]),
+                           q0=np.array([0, 0, 0, 1]),
+                           Cp1=np.array([0, 0, 0.005]),
+                           Cp2=np.array([0, 0, 0.005]),
+                           Cq=np.array([0, 0, 0]),
+                           upoint=np.array([-0.1, -0.05, 0]),
+                           uaxis=np.array([0, 1, 0]),
+                           umin=-np.pi/8,
+                           umax=np.pi/8,
+                           udot=np.pi/3)
+        laileron = Surface(pc=np.array([0, 1, 0]),
+                           q0=np.array([0, 0, 0, 1]),
+                           Cp1=np.array([0, 0, 0.005]),
+                           Cp2=np.array([0, 0, 0.005]),
+                           Cq=np.array([0, 0, 0]),
+                           upoint=np.array([-0.1, 0.05, 0]),
+                           uaxis=np.array([0, 1, 0]),
+                           umin=-np.pi/8,
+                           umax=np.pi/8,
+                           udot=np.pi/3)
+        elevator = Surface(pc=np.array([-1.3, 0, 0]),
+                           q0=np.array([0, 0, 0, 1]),
+                           Cp1=np.array([0, 0, 0.05]),
+                           Cp2=np.array([0, 0, 0.05]),
+                           Cq=np.array([0, 0, 0]),
+                           upoint=np.array([-1.3, 0, 0.8]),
+                           uaxis=np.array([0, -1, 0]),
+                           umin=-np.pi/16,
+                           umax=np.pi/16,
+                           udot=np.pi/5)
+        rudder = Surface(pc=np.array([-1.5, 0, 0]),
+                         q0=np.array([0, 0, 0, 1]),
+                         Cp1=np.array([0, 0.02, 0]),
+                         Cp2=np.array([0, 0.02, 0]),
+                         Cq=np.array([0, 0, 0]),
+                         upoint=np.array([-1, 0, 0]),
+                         uaxis=np.array([0, 0, 1]),
+                         umin=-np.pi/16,
+                         umax=np.pi/16,
+                         udot=np.pi/5)
+        self.surfaces = [raileron, laileron, elevator, rudder]
 
         # Initial rigid body state, modified by self.update function
         self.p = np.array([0, -20, 0], dtype=np.float64)  # m
@@ -181,17 +250,28 @@ class FixWing(object):
         the current time, and the timestep to forward simulate.
 
         """
-        vair = self.v - rotate_vector(self.q, wind(t), reverse=True)
+        wind_body = rotate_vector(self.q, wind(t), reverse=True)
+        vair = self.v + np.cross(self.w, self.rc) - wind_body
 
         F_thr = np.array([self.kthr*thr, 0, 0])
         F_drag = -dens*(self.Cp1 + self.Cp2*np.abs(vair))*vair
         F_grav = self.m * rotate_vector(self.q, grav, reverse=True)
-        
-        T_surf = self.ktor * (ail, elv, rud) * vair[0]
         T_drag = np.cross(self.rc, F_drag) - self.Cq*self.w
 
-        ap = self.invm*(F_thr + F_drag + F_grav) - np.cross(self.w, self.v)
-        aq = self.invM.dot(T_surf + T_drag - np.cross(self.w, self.M.dot(self.w)))
+        ucmd = [ail*self.surfaces[0].umax, -ail*self.surfaces[1].umax, elv*self.surfaces[2].umax, rud*self.surfaces[3].umax]
+        F_surf_net = np.zeros(3)
+        T_surf_net = np.zeros(3)
+        for i, surf in enumerate(self.surfaces):
+            surf.ucmd = ucmd[i]
+            surf.update(dt)
+            vsurf = rotate_vector(surf.q, self.v + np.cross(self.w, surf.pc_body) - wind_body, reverse=True) # ignores rotation of surface itself
+            F_surf = rotate_vector(surf.q, -dens*(surf.Cp1 + surf.Cp2*np.abs(vsurf))*vsurf)
+            T_surf = np.cross(surf.pc_body, F_surf) - rotate_vector(surf.q, surf.Cq*rotate_vector(surf.q, self.w, reverse=True))
+            F_surf_net = F_surf_net + F_surf
+            T_surf_net = T_surf_net + T_surf
+
+        ap = self.invm*(F_thr + F_surf_net + F_drag + F_grav) - np.cross(self.w, self.v)
+        aq = self.invM.dot(T_surf_net + T_drag - np.cross(self.w, self.M.dot(self.w)))
 
         self.p = self.p + rotate_vector(self.q, dt*self.v + 0.5*(dt**2)*ap)
         self.q = quaternion_multiply(self.q, quaternion_from_rotvec(dt*self.w + 0.5*(dt**2)*aq))
@@ -210,7 +290,7 @@ class FixWing(object):
 
 class Viz(object):
 
-    def __init__(self):
+    def __init__(self, surfaces):
         self.building_layout = np.ones((5, 5))
         self.building_size = (30, 30, 40)  # m
         self.building_spacing = np.float64(100)  # m
@@ -241,43 +321,56 @@ class Viz(object):
                 self.buildings.append(visual.box(x=x, y=y, z=self.building_size[2]/2, size=self.building_size, color=self.building_colors[idx]))
 
         # Generate ground plane
-        if self.buildings:
-            ground_xx, ground_yy = map(np.transpose, np.meshgrid(np.linspace(np.min(self.building_centers[:, 0]-50), np.max(self.building_centers[:, 0]+2500), 40),
+        ground_xx, ground_yy = map(np.transpose, np.meshgrid(np.linspace(np.min(self.building_centers[:, 0]-50), np.max(self.building_centers[:, 0]+2500), 40),
                                                                  np.linspace(np.min(self.building_centers[:, 1]-50), np.max(self.building_centers[:, 1]+2500), 40)))
-            self.ground = mlab.surf(ground_xx, ground_yy, np.random.sample(np.shape(ground_xx))-0.8, colormap="ocean", warp_scale=1)
-        else:
-            self.ground = None
+        self.ground = mlab.surf(ground_xx, ground_yy, np.random.sample(np.shape(ground_xx))-0.8, colormap="ocean", warp_scale=1)
 
         # Generate aircraft
-        self.headspan = 0.4
-        self.tailspan = 0.6
-        self.wingspan = 1.1*(self.headspan + self.tailspan)
-        self.sweep = -0.2
-        self.rudheight = 0.25*self.wingspan
+        self.headspan = 0.4+2
+        self.tailspan = 0.6+2
+        self.wingspan = 0.8*(self.headspan + self.tailspan)
+        self.sweep = -0.2*0
+        self.rudheight = 0.2*self.wingspan
         self.aircraft_nodes = np.vstack(([(0, 0, 0), (self.headspan, 0, 0)],
-                                         [(0, 0, 0), (-self.tailspan, 0, 0)],
-                                         [(0, 0, 0), (self.sweep, self.wingspan/2, 0)],
-                                         [(0, 0, 0), (self.sweep, -self.wingspan/2, 0)],
-                                         [(-self.tailspan, 0, 0), (-self.tailspan+self.sweep/5, 0, self.rudheight)],
-                                         [(-self.tailspan+self.sweep/5, 0, self.rudheight), (-self.tailspan+self.sweep/5, self.wingspan/4, self.rudheight)],
-                                         [(-self.tailspan+self.sweep/5, 0, self.rudheight), (-self.tailspan+self.sweep/5, -self.wingspan/4, self.rudheight)])).T
+                                         [(0, 0, 0), (-self.tailspan, 0, 0)])).T
+                                         # [(0, 0, 0), (self.sweep, self.wingspan/2, 0)],
+                                         # [(0, 0, 0), (self.sweep, -self.wingspan/2, 0)],
+                                         # [(-self.tailspan, 0, 0), (-self.tailspan+self.sweep/5, 0, self.rudheight)],
+                                         # [(-self.tailspan+self.sweep/5, 0, self.rudheight), (-self.tailspan+self.sweep/5, self.wingspan/4, self.rudheight)],
+                                         # [(-self.tailspan+self.sweep/5, 0, self.rudheight), (-self.tailspan+self.sweep/5, -self.wingspan/4, self.rudheight)])).T
         self.aircraft_fusel = np.vstack(([(self.headspan, 0, 0), (0, 0, 0)],
                                          [(-self.tailspan, 0, 0), (-self.tailspan+self.sweep/5, 0, self.rudheight)])).T
         self.aircraft_wings = np.vstack(([(0, 0, 0), (self.sweep, self.wingspan/2, 0)],
                                          [(0, 0, 0), (self.sweep, -self.wingspan/2, 0)])).T
-        self.aircraft_rud = np.vstack(([(-self.tailspan+self.sweep/4, self.wingspan/4, self.rudheight), (-self.tailspan+self.sweep/4, -self.wingspan/4, self.rudheight)])).T
+        self.aircraft_tail = np.vstack(([(-self.tailspan+self.sweep/4, 0.25*self.wingspan, self.rudheight), (-self.tailspan+self.sweep/4, -0.25*self.wingspan, self.rudheight)])).T
         self.aircraft_nodes_plot = mlab.points3d(self.aircraft_nodes[0, :], self.aircraft_nodes[1, :], self.aircraft_nodes[2, :], scale_factor=0.2, color=(0.5, 0.5, 0.5))
         self.aircraft_fusel_plot = mlab.plot3d(self.aircraft_fusel[0, :], self.aircraft_fusel[1, :], self.aircraft_fusel[2, :], tube_sides=10, tube_radius=0.08, color=(1, 0, 0))
         self.aircraft_wings_plot = mlab.plot3d(self.aircraft_wings[0, :], self.aircraft_wings[1, :], self.aircraft_wings[2, :], tube_sides=10, tube_radius=0.08, color=(1, 0, 1))
-        self.aircraft_rud_plot = mlab.plot3d(self.aircraft_rud[0, :], self.aircraft_rud[1, :], self.aircraft_rud[2, :], tube_sides=10, tube_radius=0.05, color=(1, 1, 0))
+        self.aircraft_tail_plot = mlab.plot3d(self.aircraft_tail[0, :], self.aircraft_tail[1, :], self.aircraft_tail[2, :], tube_sides=10, tube_radius=0.05, color=(1, 1, 0))
+        self.aircraft_surface_plots = []
+        self.aircraft_surface_corners = np.array([[ 0.2,  1, 0],
+                                                  [-0.2,  1, 0],
+                                                  [-0.2, -1, 0],
+                                                  [ 0.2, -1, 0]])
+        self.rudder_corners = np.array([[ 0.2, 0,  0.7,],
+                                        [-0.2, 0,  0.7,],
+                                        [-0.2, 0,  0.05,],
+                                        [ 0.2, 0,  0.05,]])
+        # for surf in surfaces:
+        #     surf_corners_body = []
+        #     for corner in self.aircraft_surface_corners:
+        #         surf_corners_body.append(surf.upoint + rotate_vector(surf.q, surf.pc+corner))
+        #     surf_corners_body = np.array(surf_corners_body)
+        #     xx, yy = np.meshgrid(surf_corners_body[:2, 0], surf_corners_body[1:3, 1])
+        #     self.aircraft_surface_plots.append(mlab.mesh(xx, yy, surf_corners_body[:, 2].reshape(2, 2), colormap="autumn"))
 
         # Aliases for Mayavi animate decorator and show function
         self.animate = mlab.animate
         self.show = mlab.show
 
-    def update(self, p, q, view_kwargs={}):
+    def update(self, p, q, surfaces, view_kwargs={}):
         """
-        Redraws the aircraft in fig according to the given position, quaternion, and view.
+        Redraws the aircraft in fig according to the given position, quaternion, surfaces, and view.
 
         """
         # Transform body geometry to world coordinates (using rotation matrix is faster for multiple points)
@@ -286,13 +379,45 @@ class Viz(object):
         aircraft_nodes_world = p + R.dot(self.aircraft_nodes)
         aircraft_fusel_world = p + R.dot(self.aircraft_fusel)
         aircraft_wings_world = p + R.dot(self.aircraft_wings)
-        aircraft_rud_world = p + R.dot(self.aircraft_rud)
+        aircraft_tail_world = p + R.dot(self.aircraft_tail)
 
         # Update plot objects with new world coordinate information
         self.aircraft_nodes_plot.mlab_source.set(x=aircraft_nodes_world[0, :], y=aircraft_nodes_world[1, :], z=aircraft_nodes_world[2, :])
         self.aircraft_fusel_plot.mlab_source.set(x=aircraft_fusel_world[0, :], y=aircraft_fusel_world[1, :], z=aircraft_fusel_world[2, :])
         self.aircraft_wings_plot.mlab_source.set(x=aircraft_wings_world[0, :], y=aircraft_wings_world[1, :], z=aircraft_wings_world[2, :])
-        self.aircraft_rud_plot.mlab_source.set(x=aircraft_rud_world[0, :], y=aircraft_rud_world[1, :], z=aircraft_rud_world[2, :])
+        self.aircraft_tail_plot.mlab_source.set(x=aircraft_tail_world[0, :], y=aircraft_tail_world[1, :], z=aircraft_tail_world[2, :])
+        for i, surf in enumerate(surfaces):
+            if i < 3:
+                surf_corners_body = []
+                for corner in self.aircraft_surface_corners:
+                    surf_corners_body.append(surf.upoint + rotate_vector(surf.q, surf.pc+corner))
+                surf_corners_body = np.array(surf_corners_body)
+                surf_corners_world = (p + R.dot(surf_corners_body.T)).T
+            # xx, yy = np.meshgrid(surf_corners_world[:2, 0], surf_corners_world[1:3, 1])
+            # zz = np.vstack((surf_corners_world[:2, 2], surf_corners_world[:2, 2]))
+            # self.aircraft_surface_plots[i].mlab_source.set(x=xx, y=yy, z=zz)
+            if not hasattr(self, "ra_checker"):
+                self.ra_checker = mlab.plot3d(surf_corners_world[:, 0], surf_corners_world[:, 1], surf_corners_world[:, 2])
+            elif i==0:
+                self.ra_checker.mlab_source.set(x=surf_corners_world[:, 0], y=surf_corners_world[:, 1], z=surf_corners_world[:, 2])
+            if not hasattr(self, "la_checker"):
+                self.la_checker = mlab.plot3d(surf_corners_world[:, 0], surf_corners_world[:, 1], surf_corners_world[:, 2])
+            elif i==1:
+                self.la_checker.mlab_source.set(x=surf_corners_world[:, 0], y=surf_corners_world[:, 1], z=surf_corners_world[:, 2])
+            if not hasattr(self, "el_checker"):
+                self.el_checker = mlab.plot3d(surf_corners_world[:, 0], surf_corners_world[:, 1], surf_corners_world[:, 2])
+            elif i==2:
+                self.el_checker.mlab_source.set(x=surf_corners_world[:, 0], y=surf_corners_world[:, 1], z=surf_corners_world[:, 2])
+            if not hasattr(self, "ru_checker"):
+                self.ru_checker = mlab.plot3d(surf_corners_world[:, 0], surf_corners_world[:, 1], surf_corners_world[:, 2])
+            elif i==3:
+                surf_corners_body = []
+                for corner in self.rudder_corners:
+                    surf_corners_body.append(surf.upoint + rotate_vector(surf.q, surf.pc+corner))
+                surf_corners_body = np.array(surf_corners_body)
+                surf_corners_world = (p + R.dot(surf_corners_body.T)).T
+                self.ru_checker.mlab_source.set(x=surf_corners_world[:, 0], y=surf_corners_world[:, 1], z=surf_corners_world[:, 2])
+
 
         # Set camera view
         if view_kwargs: mlab.view(**view_kwargs)
@@ -340,7 +465,8 @@ class Pilot(object):
 
         # Valid input device names in priority order
         self.valid_device_names = ["Microsoft X-Box One pad (Firmware 2015)",
-                                   "PowerA Xbox One wired controller"]
+                                   "PowerA Xbox One wired controller",
+                                   "Logitech Gamepad F310"]
 
         # Set valid input device
         self.input_device = None
@@ -360,7 +486,8 @@ class Pilot(object):
 
         # Analog input characteristics
         self.max_stick = 32767
-        self.max_trigger = 1023
+        if self.input_device == "Logitech Gamepad F310": self.max_trigger = 255
+        else: self.max_trigger = 1023
         self.min_stick = int(self.stick_deadband * self.max_stick)
         self.min_trigger = int(self.trigger_deadband * self.max_trigger)
 
@@ -380,7 +507,7 @@ class Pilot(object):
         while self.buffer:
             event = self.buffer.pop()
             if event.code == "ABS_Y": pass
-            elif event.code == "ABS_X": self.command.yaw = -self._stick_frac(event.state) * self.max_yaw
+            elif event.code == "ABS_X": self.command.yaw = self._stick_frac(event.state) * self.max_yaw
             elif event.code == "ABS_RY": self.command.pitch = -self._stick_frac(event.state) * self.max_pitch
             elif event.code == "ABS_RX": self.command.roll = self._stick_frac(event.state) * self.max_roll
             elif event.code == "ABS_Z": pass
@@ -406,7 +533,8 @@ class Pilot(object):
         self.command = Command()
         self.stay_alive = True
         if self.input_device in ["Microsoft X-Box One pad (Firmware 2015)",
-                                 "PowerA Xbox One wired controller"]:
+                                 "PowerA Xbox One wired controller",
+                                 "Logitech Gamepad F310"]:
             self.pilot_thread = Thread(target=self._listen_xbox)
         else:
             raise IOError("FATAL: No listener function has been implemented for device {}.".format(self.input_device))
@@ -513,12 +641,12 @@ dt = 0.01  # s
 # Aircraft, scene, and user
 fixwing = FixWing()
 state0 = [fixwing.p, fixwing.q, fixwing.v, fixwing.w]
-viz = Viz()
+viz = Viz(fixwing.surfaces)
 pilot = Pilot(button_callbacks={"A": bcb_A, "B": bcb_B, "L": bcb_L, "R": bcb_R, "DV": bcb_DV, "DH": bcb_DH})
                                 # "SL": bcb_SL, "SR": bcb_SR, "DV": bcb_DV, "DH": bcb_DH})
 
 # Initial camera condition
-cam_state = {"focalpoint": fixwing.p.tolist(), "azimuth": 180, "elevation": 85, "distance": 15}  # m and deg
+cam_state = {"focalpoint": fixwing.p.tolist(), "azimuth": 180, "elevation": 85, "distance": 25}  # m and deg
 cam_azim_rate = 0
 cam_elev_rate = 0
 cam_dist_rate = 0
@@ -548,8 +676,10 @@ def simulate():
             cam_state["distance"] = np.clip(cam_state["distance"] + dt*cam_dist_rate, 5, np.inf)
 
         # Re-render changed parts of the scene at this real-time instant
-        viz.update(fixwing.p, fixwing.q, cam_state)
+        viz.update(fixwing.p, fixwing.q, fixwing.surfaces, cam_state)
         yield
+        # print fixwing.surfaces[0].u, fixwing.surfaces[1].u
+
 
 # Start'er up
 pilot.start_pilot_thread()
