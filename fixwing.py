@@ -1,3 +1,4 @@
+#!/usr/bin/python
 """
 Basic fixed-wing airplane simulator to test out an intuitive model.
 This was a thrown-together messy modification of the software in
@@ -193,7 +194,7 @@ class FixWing(object):
         self.Cq = np.array([30, 40, 20], dtype=np.float64)  # N/(rad/s)
 
         # Thrust from throttle ratio
-        self.kthr = 80  # N/eff
+        self.kthr = 100  # N/eff
 
         # Flight surfaces
         raileron = Surface(pc=np.array([0, -1, 0]),
@@ -203,9 +204,9 @@ class FixWing(object):
                            Cq=np.array([0, 0, 0]),
                            upoint=np.array([-0.1, -0.05, 0]),
                            uaxis=np.array([0, 1, 0]),
-                           umin=-np.pi/8,
-                           umax=np.pi/8,
-                           udot=np.pi/2)
+                           umin=-np.pi/6,
+                           umax=np.pi/6,
+                           udot=np.pi/1)
         laileron = Surface(pc=np.array([0, 1, 0]),
                            q0=np.array([0, 0, 0, 1]),
                            Cp1=np.array([0, 0, 0.005]),
@@ -213,9 +214,9 @@ class FixWing(object):
                            Cq=np.array([0, 0, 0]),
                            upoint=np.array([-0.1, 0.05, 0]),
                            uaxis=np.array([0, 1, 0]),
-                           umin=-np.pi/8,
-                           umax=np.pi/8,
-                           udot=np.pi/2)
+                           umin=-np.pi/6,
+                           umax=np.pi/6,
+                           udot=np.pi/1)
         elevator = Surface(pc=np.array([-1.3, 0, 0]),
                            q0=np.array([0, 0, 0, 1]),
                            Cp1=np.array([0, 0, 0.05]),
@@ -223,9 +224,9 @@ class FixWing(object):
                            Cq=np.array([0, 0, 0]),
                            upoint=np.array([-1.3, 0, 0.8]),
                            uaxis=np.array([0, -1, 0]),
-                           umin=-np.pi/8,
-                           umax=np.pi/8,
-                           udot=np.pi/3)
+                           umin=-np.pi/6,
+                           umax=np.pi/6,
+                           udot=np.pi/1)
         rudder = Surface(pc=np.array([-1.5, 0, 0]),
                          q0=np.array([0, 0, 0, 1]),
                          Cp1=np.array([0, 0.05, 0]),
@@ -233,9 +234,9 @@ class FixWing(object):
                          Cq=np.array([0, 0, 0]),
                          upoint=np.array([-1, 0, 0]),
                          uaxis=np.array([0, 0, 1]),
-                         umin=-np.pi/8,
-                         umax=np.pi/8,
-                         udot=np.pi/3)
+                         umin=-np.pi/6,
+                         umax=np.pi/6,
+                         udot=np.pi/1)
         self.surfaces = [raileron, laileron, elevator, rudder]
 
         # Initial rigid body state, modified by self.update function
@@ -650,16 +651,21 @@ cam_elev_rate = 0
 cam_dist_rate = 0
 cam_follow = True
 
-# Adaptive estimate of CoP
+# Adaptive estimate of CoP, integrators, smoothers etc...
 rc = np.array([0, 0, 0])
 integ_roll = 0
 integ_pitch = 0
 use_controller = 0
+use_tgen = True
+des_roll = 0
+des_pitch = 0
+des_w0 = 0
+des_w1 = 0
 
 # Simulation loop function
 @viz.animate(delay=50)  # ms (20 FPS is the best Mayavi can do)
 def simulate():
-    global cam_state, t, rc, integ_roll, integ_pitch
+    global cam_state, t, rc, integ_roll, integ_pitch, des_roll, des_pitch, des_w0, des_w1
     while True:
 
         # Between each scene render, simulate up to real-time
@@ -667,41 +673,58 @@ def simulate():
 
             # Update user input commands and compute efforts needed to achieve those commands
             cmd = pilot.get_command()
-            lim = np.deg2rad(45)
+            lim = np.deg2rad(60)
+            if use_tgen:  # whether or not to smooth inputs
+                spring = 0.4
+                damp = 2*np.sqrt(spring)
+                des_a0 = spring*(cmd.roll*lim - des_roll) - damp*des_w0
+                des_w0 += dt*des_a0
+                des_roll += dt*des_w0 + 0.5*dt**2*des_a0
+                des_a1 = spring*(cmd.pitch*lim - des_pitch) - damp*des_w1
+                des_w1 += dt*des_a1
+                des_pitch += dt*des_w1 + 0.5*dt**2*des_a1
+            else:
+                des_roll = cmd.roll*lim
+                des_pitch = cmd.pitch*lim
+                des_w0 = des_w1 = 0
+            des_w2 = -cmd.yaw*np.deg2rad(10)
             roll, pitch, yaw = euler_from_quaternion(fixwing.q)
-            e = rotvec_from_quaternion(quaternion_multiply(quaternion_inverse(fixwing.q), quaternion_from_euler(cmd.roll*lim, cmd.pitch*lim, yaw)))
-            if use_controller == 1:
-                uroll = 20*(cmd.roll*lim - roll) - 10*fixwing.w[0]
-                upitch = 10*(cmd.pitch*lim - pitch) - 10*fixwing.w[1]
-                uyaw = 10*(-cmd.yaw*np.deg2rad(10)-fixwing.w[2])
+            e = rotvec_from_quaternion(quaternion_multiply(quaternion_inverse(fixwing.q), quaternion_from_euler(des_roll, des_pitch, yaw)))
+            if use_controller == 1:  # simple PD
+                uroll = 20*(des_roll - roll) + (des_w0 - 10*fixwing.w[0])
+                upitch = 10*(des_pitch - pitch) + (des_w1 - 10*fixwing.w[1])
+                uyaw = 10*(des_w2 - fixwing.w[2])
                 fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
-            elif use_controller == 2:
-                uroll = 20*(cmd.roll*lim - roll) - 10*fixwing.w[0] + integ_roll
-                upitch = 10*(cmd.pitch*lim - pitch) - 10*fixwing.w[1] + integ_pitch
-                uyaw = 10*(-cmd.yaw*np.deg2rad(10)-fixwing.w[2])
-                integ_roll += dt*1*(cmd.roll*lim - roll)
-                integ_pitch += dt*2*(cmd.pitch*lim - pitch)
+                print " e: ", np.rad2deg(np.round(e, 3))
+            elif use_controller == 2:  # PID
+                uroll = 20*(des_roll - roll) + (des_w0 - 10*fixwing.w[0]) + integ_roll
+                upitch = 10*(des_pitch - pitch) + (des_w1 - 10*fixwing.w[1]) + integ_pitch
+                uyaw = 10*(des_w2 - fixwing.w[2])
+                integ_roll += dt*1*(des_roll - roll)
+                integ_pitch += dt*3*(des_pitch - pitch)
                 fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
-                print integ_pitch
-            elif use_controller == 3:
+                print "integ_pitch: ", integ_pitch
+            elif use_controller == 3:  # adaptive
                 Cp = fixwing.Cp1
                 s = fixwing.v
-                ff = -dens*np.cross(rc, Cp*s) - np.cross(fixwing.w, fixwing.M.dot(fixwing.w))
-                uroll = 20*e[0] - 10*fixwing.w[0] - ff[0]
-                upitch = 10*e[1] - 10*fixwing.w[1] - ff[1]
-                uyaw = 10*(-cmd.yaw*np.deg2rad(10)-fixwing.w[2]) - ff[2]
+                E = np.array([1, 1, 1])
+                ff = (-dens*np.cross(rc, Cp*s) - np.cross(fixwing.w, fixwing.M.dot(fixwing.w)))# / (dens*E*npl.norm(s)**2)
+                uroll = 20*e[0] + (des_w0 - 10*fixwing.w[0]) - ff[0]
+                upitch = 10*e[1] + (des_w1 - 10*fixwing.w[1]) - ff[1]
+                uyaw = 10*(des_w2 - fixwing.w[2]) - ff[2]
                 Y = dens*np.array([[          0, -Cp[2]*s[2],  Cp[1]*s[1]],
                                    [ Cp[2]*s[2],           0, -Cp[0]*s[0]],
                                    [-Cp[1]*s[1],  Cp[0]*s[0],           0]])
-                rc = rc - dt*0.1*([1, 0, 0]*Y.T.dot(e - fixwing.w))
+                rc = rc - dt*0.5*([1, 0.1, 1]*Y.T.dot(e + ([des_w0, des_w1, des_w2] - fixwing.w)))
                 # rc = [-0.019, 0, 0]
                 # print "ff: ", np.round(ff, 3)
-                print "rc: ", np.round(rc, 3)
+                print "rc: ", np.round(rc, 3), "| e: ", np.round(np.rad2deg(e), 1)
                 fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
-            else:
+            else:  # direct inputs
                 fixwing.update(cmd.thr, cmd.roll, cmd.pitch, cmd.yaw, t, dt)
-            # print " e: ", np.round(e, 3)
-            # print "----"
+            # print np.round(np.rad2deg(roll), 3), np.round(np.rad2deg(pitch), 3), np.round(np.rad2deg(yaw), 3)
+            # fixwing.w = np.array([des_w0, des_w1, des_w2]) # IDEAL OVERRIDE
+            # fixwing.q = quaternion_from_euler(des_roll, des_pitch, 0)
             t += dt
 
             # Update camera state according to user input
