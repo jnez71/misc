@@ -331,8 +331,7 @@ class Viz(object):
         self.wingspan = 0.8*(self.headspan + self.tailspan)
         self.sweep = -0.2*0
         self.rudheight = 0.2*self.wingspan
-        self.aircraft_nodes = np.vstack(([(0, 0, 0), (self.headspan, 0, 0)],
-                                         [(0, 0, 0), (-self.tailspan, 0, 0)])).T
+        self.aircraft_nodes = np.vstack(([(self.headspan, 0, 0), (-self.tailspan, 0, 0)])).T
                                          # [(0, 0, 0), (self.sweep, self.wingspan/2, 0)],
                                          # [(0, 0, 0), (self.sweep, -self.wingspan/2, 0)],
                                          # [(-self.tailspan, 0, 0), (-self.tailspan+self.sweep/5, 0, self.rudheight)],
@@ -340,8 +339,7 @@ class Viz(object):
                                          # [(-self.tailspan+self.sweep/5, 0, self.rudheight), (-self.tailspan+self.sweep/5, -self.wingspan/4, self.rudheight)])).T
         self.aircraft_fusel = np.vstack(([(self.headspan, 0, 0), (0, 0, 0)],
                                          [(-self.tailspan, 0, 0), (-self.tailspan+self.sweep/5, 0, self.rudheight)])).T
-        self.aircraft_wings = np.vstack(([(0, 0, 0), (self.sweep, self.wingspan/2, 0)],
-                                         [(0, 0, 0), (self.sweep, -self.wingspan/2, 0)])).T
+        self.aircraft_wings = np.vstack(([(self.sweep, self.wingspan/2, 0), (self.sweep, -self.wingspan/2, 0)])).T
         self.aircraft_tail = np.vstack(([(-self.tailspan+self.sweep/4, 0.25*self.wingspan, self.rudheight), (-self.tailspan+self.sweep/4, -0.25*self.wingspan, self.rudheight)])).T
         self.aircraft_nodes_plot = mlab.points3d(self.aircraft_nodes[0, :], self.aircraft_nodes[1, :], self.aircraft_nodes[2, :], scale_factor=0.2, color=(0.5, 0.5, 0.5))
         self.aircraft_fusel_plot = mlab.plot3d(self.aircraft_fusel[0, :], self.aircraft_fusel[1, :], self.aircraft_fusel[2, :], tube_sides=10, tube_radius=0.08, color=(1, 0, 0))
