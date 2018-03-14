@@ -190,7 +190,7 @@ class FixWing(object):
 
         # Main body center of drag and rotational drag coefficients
         self.rc = np.array([0, 0, 0], dtype=np.float64)  # m
-        self.Cq = np.array([40, 40, 20], dtype=np.float64)  # N/(rad/s)
+        self.Cq = np.array([30, 40, 20], dtype=np.float64)  # N/(rad/s)
 
         # Thrust from throttle ratio
         self.kthr = 80  # N/eff
@@ -198,14 +198,14 @@ class FixWing(object):
         # Flight surfaces
         raileron = Surface(pc=np.array([0, -1, 0]),
                            q0=np.array([0, 0, 0, 1]),
-                           Cp1=np.array([0, 0, 0.005]),
-                           Cp2=np.array([0, 0, 0.005]),
+                           Cp1=np.array([0, 0, 0.01]),
+                           Cp2=np.array([0, 0, 0.01]),
                            Cq=np.array([0, 0, 0]),
                            upoint=np.array([-0.1, -0.05, 0]),
                            uaxis=np.array([0, 1, 0]),
                            umin=-np.pi/8,
                            umax=np.pi/8,
-                           udot=np.pi/3)
+                           udot=np.pi/2)
         laileron = Surface(pc=np.array([0, 1, 0]),
                            q0=np.array([0, 0, 0, 1]),
                            Cp1=np.array([0, 0, 0.005]),
@@ -215,7 +215,7 @@ class FixWing(object):
                            uaxis=np.array([0, 1, 0]),
                            umin=-np.pi/8,
                            umax=np.pi/8,
-                           udot=np.pi/3)
+                           udot=np.pi/2)
         elevator = Surface(pc=np.array([-1.3, 0, 0]),
                            q0=np.array([0, 0, 0, 1]),
                            Cp1=np.array([0, 0, 0.05]),
@@ -223,19 +223,19 @@ class FixWing(object):
                            Cq=np.array([0, 0, 0]),
                            upoint=np.array([-1.3, 0, 0.8]),
                            uaxis=np.array([0, -1, 0]),
-                           umin=-np.pi/16,
-                           umax=np.pi/16,
-                           udot=np.pi/5)
+                           umin=-np.pi/8,
+                           umax=np.pi/8,
+                           udot=np.pi/3)
         rudder = Surface(pc=np.array([-1.5, 0, 0]),
                          q0=np.array([0, 0, 0, 1]),
-                         Cp1=np.array([0, 0.02, 0]),
-                         Cp2=np.array([0, 0.02, 0]),
+                         Cp1=np.array([0, 0.05, 0]),
+                         Cp2=np.array([0, 0.05, 0]),
                          Cq=np.array([0, 0, 0]),
                          upoint=np.array([-1, 0, 0]),
                          uaxis=np.array([0, 0, 1]),
-                         umin=-np.pi/16,
-                         umax=np.pi/16,
-                         udot=np.pi/5)
+                         umin=-np.pi/8,
+                         umax=np.pi/8,
+                         udot=np.pi/3)
         self.surfaces = [raileron, laileron, elevator, rudder]
 
         # Initial rigid body state, modified by self.update function
@@ -505,9 +505,9 @@ class Pilot(object):
         while self.buffer:
             event = self.buffer.pop()
             if event.code == "ABS_Y": pass
-            elif event.code == "ABS_X": self.command.yaw = self._stick_frac(event.state) * self.max_yaw
+            elif event.code == "ABS_X": self.command.roll = self._stick_frac(event.state) * self.max_roll
             elif event.code == "ABS_RY": self.command.pitch = -self._stick_frac(event.state) * self.max_pitch
-            elif event.code == "ABS_RX": self.command.roll = self._stick_frac(event.state) * self.max_roll
+            elif event.code == "ABS_RX": self.command.yaw = self._stick_frac(event.state) * self.max_yaw
             elif event.code == "ABS_Z": pass
             elif event.code == "ABS_RZ": self.command.thr = self._trigger_frac(event.state) * self.max_thr
             elif event.code in self.button_codes:
@@ -650,21 +650,58 @@ cam_elev_rate = 0
 cam_dist_rate = 0
 cam_follow = True
 
+# Adaptive estimate of CoP
+rc = np.array([0, 0, 0])
+integ_roll = 0
+integ_pitch = 0
+use_controller = 0
+
 # Simulation loop function
 @viz.animate(delay=50)  # ms (20 FPS is the best Mayavi can do)
 def simulate():
-    global cam_state, t
+    global cam_state, t, rc, integ_roll, integ_pitch
     while True:
 
         # Between each scene render, simulate up to real-time
         while t < time.time():
 
             # Update user input commands and compute efforts needed to achieve those commands
-            command_rcv = pilot.get_command()
-            # efforts = copilot.control(state_est, command_rcv)
-
-            # Step simulation forward
-            fixwing.update(command_rcv.thr, command_rcv.roll, command_rcv.pitch, command_rcv.yaw, t, dt)
+            cmd = pilot.get_command()
+            lim = np.deg2rad(45)
+            roll, pitch, yaw = euler_from_quaternion(fixwing.q)
+            e = rotvec_from_quaternion(quaternion_multiply(quaternion_inverse(fixwing.q), quaternion_from_euler(cmd.roll*lim, cmd.pitch*lim, yaw)))
+            if use_controller == 1:
+                uroll = 20*(cmd.roll*lim - roll) - 10*fixwing.w[0]
+                upitch = 10*(cmd.pitch*lim - pitch) - 10*fixwing.w[1]
+                uyaw = 10*(-cmd.yaw*np.deg2rad(10)-fixwing.w[2])
+                fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
+            elif use_controller == 2:
+                uroll = 20*(cmd.roll*lim - roll) - 10*fixwing.w[0] + integ_roll
+                upitch = 10*(cmd.pitch*lim - pitch) - 10*fixwing.w[1] + integ_pitch
+                uyaw = 10*(-cmd.yaw*np.deg2rad(10)-fixwing.w[2])
+                integ_roll += dt*1*(cmd.roll*lim - roll)
+                integ_pitch += dt*2*(cmd.pitch*lim - pitch)
+                fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
+                print integ_pitch
+            elif use_controller == 3:
+                Cp = fixwing.Cp1
+                s = fixwing.v
+                ff = -dens*np.cross(rc, Cp*s) - np.cross(fixwing.w, fixwing.M.dot(fixwing.w))
+                uroll = 20*e[0] - 10*fixwing.w[0] - ff[0]
+                upitch = 10*e[1] - 10*fixwing.w[1] - ff[1]
+                uyaw = 10*(-cmd.yaw*np.deg2rad(10)-fixwing.w[2]) - ff[2]
+                Y = dens*np.array([[          0, -Cp[2]*s[2],  Cp[1]*s[1]],
+                                   [ Cp[2]*s[2],           0, -Cp[0]*s[0]],
+                                   [-Cp[1]*s[1],  Cp[0]*s[0],           0]])
+                rc = rc - dt*0.1*([1, 0, 0]*Y.T.dot(e - fixwing.w))
+                # rc = [-0.019, 0, 0]
+                # print "ff: ", np.round(ff, 3)
+                print "rc: ", np.round(rc, 3)
+                fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
+            else:
+                fixwing.update(cmd.thr, cmd.roll, cmd.pitch, cmd.yaw, t, dt)
+            # print " e: ", np.round(e, 3)
+            # print "----"
             t += dt
 
             # Update camera state according to user input
