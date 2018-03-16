@@ -655,8 +655,8 @@ cam_follow = True
 rc = np.array([0, 0, 0])
 integ_roll = 0
 integ_pitch = 0
-use_controller = 0
-use_tgen = True
+use_controller = 4
+use_tgen = False
 des_roll = 0
 des_pitch = 0
 des_w0 = 0
@@ -719,6 +719,17 @@ def simulate():
                 # rc = [-0.019, 0, 0]
                 # print "ff: ", np.round(ff, 3)
                 print "rc: ", np.round(rc, 3), "| e: ", np.round(np.rad2deg(e), 1)
+                fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
+            elif use_controller == 4:  # course control, with fixed adaptation
+                Cp = fixwing.Cp1
+                s = fixwing.v
+                E = np.array([1, 1, 1])
+                ff = (-dens*np.cross(rc, Cp*s) - np.cross(fixwing.w, fixwing.M.dot(fixwing.w)))# / (dens*E*npl.norm(s)**2)
+                ucourse = 10*rotate_vector(fixwing.q, [0, 0, des_w2 - rotate_vector(fixwing.q, fixwing.w)[2]], reverse=True)
+                uroll = 20*e[0] + (des_w0 - 10*fixwing.w[0]) - ff[0] + ucourse[0]
+                upitch = 10*e[1] + (des_w1 - 10*fixwing.w[1]) - ff[1] + ucourse[1]
+                uyaw = ucourse[2] - ff[2]
+                rc = [-0.019, 0, 0]
                 fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
             else:  # direct inputs
                 fixwing.update(cmd.thr, cmd.roll, cmd.pitch, cmd.yaw, t, dt)
