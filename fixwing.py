@@ -590,14 +590,23 @@ def bcb_A(val):
         if cam_follow: cam_follow = False
         else: cam_follow = True
 
-# Reset state and copilot internal state
+# Reset
 def bcb_B(val):
-    global state0, fixwing
+    global state0, fixwing, des_roll, des_pitch, des_yaw, des_w0, des_w1, des_w2, rc, integ_roll, integ_pitch
     if val:
         fixwing.p = state0[0]
         fixwing.q = state0[1]
         fixwing.v = state0[2]
         fixwing.w = state0[3]
+        des_roll = 0
+        des_pitch = 0
+        des_yaw = 0
+        des_w0 = 0
+        des_w1 = 0
+        des_w2 = 0
+        rc = np.array([0, 0, 0])
+        integ_roll = 0
+        integ_pitch = 0
 
 # Zoom-out camera
 def bcb_L(val):
@@ -655,17 +664,20 @@ cam_follow = True
 rc = np.array([0, 0, 0])
 integ_roll = 0
 integ_pitch = 0
-use_controller = 3
-use_tgen = True
 des_roll = 0
 des_pitch = 0
+des_yaw = 0
 des_w0 = 0
 des_w1 = 0
+des_w2 = 0
+use_controller = 0
+use_tgen = True
+use_course = False
 
 # Simulation loop function
 @viz.animate(delay=50)  # ms (20 FPS is the best Mayavi can do)
 def simulate():
-    global cam_state, t, rc, integ_roll, integ_pitch, des_roll, des_pitch, des_w0, des_w1
+    global cam_state, t, rc, integ_roll, integ_pitch, des_roll, des_pitch, des_yaw, des_w0, des_w1, des_w2
     while True:
 
         # Between each scene render, simulate up to real-time
@@ -674,6 +686,7 @@ def simulate():
             # Update user input commands and compute efforts needed to achieve those commands
             cmd = pilot.get_command()
             lim = np.deg2rad(60)
+            roll, pitch, yaw = euler_from_quaternion(fixwing.q)
             if use_tgen:  # whether or not to smooth inputs
                 spring = 0.8
                 damp = 2*np.sqrt(spring)
@@ -683,53 +696,53 @@ def simulate():
                 des_a1 = spring*(cmd.pitch*lim - des_pitch) - damp*des_w1
                 des_w1 += dt*des_a1
                 des_pitch += dt*des_w1 + 0.5*dt**2*des_a1
+                if use_course:
+                    des_a2 = 5*(-np.deg2rad(10)*cmd.yaw - des_w2)
+                    des_w2 += dt*des_a2
+                    des_yaw += dt*des_w2 + 0.5*dt**2*des_a2
+                    des_yaw = unwrap_angle(des_yaw)
+                else:
+                    des_yaw = yaw
+                    des_w2 = -cmd.yaw*np.deg2rad(10)
             else:
                 des_roll = cmd.roll*lim
                 des_pitch = cmd.pitch*lim
+                des_yaw = yaw
                 des_w0 = des_w1 = 0
-            des_w2 = -cmd.yaw*np.deg2rad(10)
-            roll, pitch, yaw = euler_from_quaternion(fixwing.q)
-            e = rotvec_from_quaternion(quaternion_multiply(quaternion_inverse(fixwing.q), quaternion_from_euler(des_roll, des_pitch, yaw)))
+                des_w2 = -cmd.yaw*np.deg2rad(10)
+            e = rotvec_from_quaternion(quaternion_multiply(quaternion_inverse(fixwing.q), quaternion_from_euler(des_roll, des_pitch, des_yaw)))
+            kp = [20, 10, 10]
+            kd = [10, 10, 10]
+            if not use_course: kp[2] = 0
             if use_controller == 1:  # simple PD
-                uroll = 20*(des_roll - roll) + 10*(des_w0 - fixwing.w[0])
-                upitch = 10*(des_pitch - pitch) + 10*(des_w1 - fixwing.w[1])
-                uyaw = 10*(des_w2 - fixwing.w[2])
+                uroll = kp[0]*(des_roll - roll) + kd[0]*(des_w0 - fixwing.w[0])
+                upitch = kp[1]*(des_pitch - pitch) + kd[1]*(des_w1 - fixwing.w[1])
+                uyaw = kd[2]*(des_w2 - fixwing.w[2])
                 fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
                 print " e: ", np.rad2deg(np.round(e, 3))
             elif use_controller == 2:  # PID
-                uroll = 20*(des_roll - roll) + 10*(des_w0 - fixwing.w[0]) + integ_roll
-                upitch = 10*(des_pitch - pitch) + 10*(des_w1 - fixwing.w[1]) + integ_pitch
-                uyaw = 10*(des_w2 - fixwing.w[2])
+                uroll = kp[0]*(des_roll - roll) + kd[0]*(des_w0 - fixwing.w[0]) + integ_roll
+                upitch = kp[1]*(des_pitch - pitch) + kd[1]*(des_w1 - fixwing.w[1]) + integ_pitch
+                uyaw = kd[2]*(des_w2 - fixwing.w[2])
                 integ_roll += dt*1*(des_roll - roll)
                 integ_pitch += dt*3*(des_pitch - pitch)
                 fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
-                print "integ_pitch: ", integ_pitch
+                print "integs roll, pitch: ", np.round((integ_roll, integ_pitch), 2), "| e: ", np.round(np.rad2deg(e), 1)
             elif use_controller == 3:  # adaptive
                 Cp = fixwing.Cp1
                 s = fixwing.v
                 E = np.array([1, 1, 1])
                 ff = (-dens*np.cross(rc, Cp*s) - np.cross(fixwing.w, fixwing.M.dot(fixwing.w)))# / (dens*E*npl.norm(s)**2)
-                uroll = 20*e[0] + 10*(des_w0 - fixwing.w[0]) - ff[0]
-                upitch = 10*e[1] + 10*(des_w1 - fixwing.w[1]) - ff[1]
-                uyaw = 10*(des_w2 - fixwing.w[2]) - ff[2]
+                uroll = kp[0]*e[0] + kd[0]*(des_w0 - fixwing.w[0]) - ff[0]
+                upitch = kp[1]*e[1] + kd[1]*(des_w1 - fixwing.w[1]) - ff[1]
+                uyaw = kp[2]*e[2] + kd[2]*(des_w2 - fixwing.w[2]) - ff[2]
                 Y = dens*np.array([[          0, -Cp[2]*s[2],  Cp[1]*s[1]],
                                    [ Cp[2]*s[2],           0, -Cp[0]*s[0]],
                                    [-Cp[1]*s[1],  Cp[0]*s[0],           0]])
-                rc = rc - dt*0.5*([1, 0.1, 1]*Y.T.dot(e + ([des_w0, des_w1, des_w2] - fixwing.w)))
+                rc = rc - dt*0.03*([1, 1, 1]*Y.T.dot(kp*e + kd*([des_w0, des_w1, des_w2] - fixwing.w)))
                 # rc = [-0.019, 0, 0]
                 # print "ff: ", np.round(ff, 3)
                 print "rc: ", np.round(rc, 3), "| e: ", np.round(np.rad2deg(e), 1)
-                fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
-            elif use_controller == 4:  # course control, with fixed adaptation
-                Cp = fixwing.Cp1
-                s = fixwing.v
-                E = np.array([1, 1, 1])
-                ff = (-dens*np.cross(rc, Cp*s) - np.cross(fixwing.w, fixwing.M.dot(fixwing.w)))# / (dens*E*npl.norm(s)**2)
-                ucourse = 10*rotate_vector(fixwing.q, [0, 0, des_w2 - rotate_vector(fixwing.q, fixwing.w)[2]], reverse=True)
-                uroll = 20*e[0] + 10*(des_w0 - fixwing.w[0]) - ff[0] + ucourse[0]
-                upitch = 10*e[1] + 10*(des_w1 - fixwing.w[1]) - ff[1] + ucourse[1]
-                uyaw = ucourse[2] - ff[2]
-                rc = [-0.019, 0, 0]
                 fixwing.update(cmd.thr, uroll, upitch, -uyaw, t, dt)
             else:  # direct inputs
                 fixwing.update(cmd.thr, cmd.roll, cmd.pitch, cmd.yaw, t, dt)
