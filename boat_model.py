@@ -3,7 +3,7 @@ Contains a model of a 3DOF marine ship. Supplies parameter values,
 a function for the full nonlinear dynamic, and functions for
 jacobians of said dynamic. Running this script as __main__ will
 present a quick open-loop simulation, comparing the nonlinear
-dynamics to the linearized dynamics.
+dynamics to the linearized (about initial condition) dynamics.
 
 State is: [x_world_position (m),
            y_world_position (m),
@@ -28,13 +28,13 @@ import matplotlib.pyplot as plt
 ################################################# PHYSICAL PARAMETERS
 
 # Boat inertia and center of gravity
-m = 1000  # kg
-Iz = 1500  # kg*m**2
-xg = 0.1  # m
+m = 1.5*180  # kg
+Iz = m*(3**2)  # kg*m**2
+xg = -0.1  # m
 
 # Fluid inertial effects
-wm_xu = -0.025*m  # kg
-wm_yv = -0.25*m  # kg
+wm_xu = -0.025*m  # kg          # These expressions are just an okay starting point
+wm_yv = -0.25*m  # kg           # if all you somewhat know are m, Iz, and xg
 wm_yr = -0.25*m*xg  # kg*m
 wm_nr = -0.25*Iz  # kg*m**2
 
@@ -117,6 +117,23 @@ B = np.array([
               [             0, -(wm_yr - m*xg)/(m**2*xg**2 - Iz*m + Iz*wm_yv + m*wm_nr - wm_nr*wm_yv + wm_yr**2 - 2*m*wm_yr*xg),    -(m - wm_yv)/(m**2*xg**2 - Iz*m + Iz*wm_yv + m*wm_nr - wm_nr*wm_yv + wm_yr**2 - 2*m*wm_yr*xg)]
             ])
 
+
+# Returns an angle on [-pi, pi]
+def unwrap(ang):
+    return np.mod(ang+np.pi, 2*np.pi) - np.pi
+
+# Adds a perturbation to a state, q [+] dq
+def qplus(q, dq):
+    qp = q + dq
+    qp[2] = unwrap(qp[2])
+    return qp
+
+# Subtracts two states, ql [-] qr
+def qminus(ql, qr):
+    dq = ql - qr
+    dq[2] = unwrap(dq[2])
+    return dq
+
 ################################################# SIMULATION
 
 if __name__ == "__main__":
@@ -126,8 +143,9 @@ if __name__ == "__main__":
     dt = 0.005  # s
 
     # Initial condition
-    q = np.array([-5, 10, -0.1, 0, 0, 0.1], dtype=np.float64)  # [m, m, rad, m/s, m/s, rad/s]
-    qlin = np.copy(q)
+    q0 = np.array([-5, 10, -0.1, 0.2, -0.1, 0.1], dtype=np.float64) # [m, m, rad, m/s, m/s, rad/s]
+    q = np.copy(q0)
+    qlin = np.copy(q0)
     u = np.array([0, 0, 0], dtype=np.float64)  # [N, N, N*m]
 
     # Define time domain
@@ -142,7 +160,7 @@ if __name__ == "__main__":
     for i, t in enumerate(t_arr):
 
         # Some exogenous input
-        u = 500*np.sin(0.5*t) * np.ones(3)
+        u = 300*np.sin(0.5*t) * np.array([1, 1, 2])
 
         # Record this instant
         q_history[i] = q
@@ -150,8 +168,8 @@ if __name__ == "__main__":
         u_history[i] = u
 
         # Step forward, qnext = qlast + qdot*dt
-        q = q + f(q, u)*dt
-        qlin = qlin + (A(qlin).dot(qlin) + B.dot(u))*dt
+        q = qplus(q, f(q, u)*dt)
+        qlin = qplus(qlin, (A(q0).dot(qminus(qlin, q0)) + B.dot(u))*dt)
 
     # Figure for individual results
     fig1 = plt.figure()
@@ -216,7 +234,7 @@ if __name__ == "__main__":
     # Plot norm linearization errors
     ax = fig1.add_subplot(fig1rows, fig1cols, 8)
     ax.set_title('Norm Linearization Error', fontsize=16)
-    ax.plot(t_arr, npl.norm(q_history - qlin_history, axis=1), 'k')
+    ax.plot(t_arr, npl.norm([qminus(q_history[i], qlin_history[i]) for i in xrange(len(t_arr))], axis=1), 'k')
     ax.set_xlabel('Time (s)')
     ax.grid(True)
 
