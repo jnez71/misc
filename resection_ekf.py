@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Solving a noisy 2D-position-resection problem with an extended Kalman filter.
 https://en.wikipedia.org/wiki/Position_resection

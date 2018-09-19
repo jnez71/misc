@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Recursive Bayes for POMDP belief-state tracking.
 Max-a-posteriori estimation.

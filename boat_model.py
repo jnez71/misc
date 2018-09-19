@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Contains a model of a 3DOF marine ship. Supplies parameter values,
 a function for the full nonlinear dynamic, and functions for

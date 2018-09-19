@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Sampling from a normal distribution over SO3.
 

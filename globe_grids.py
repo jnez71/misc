@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Creates various combinations of latitude and longitude lines
 to demonstrate different grid types for globes. (This requires

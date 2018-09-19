@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Fun with the Schrodinger equation!
 

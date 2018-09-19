@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Simulation of planar mobile inverted pendulum (MIP) robot,
 assuming no-slip rigid body dynamics.

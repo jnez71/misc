@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2
 """
 Formulating the finite-horizon discrete-time linear control problem
 as an algebraic minimization problem, which can then be solved with

@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Tunes a linear IIR filter to have any specified impulse response.
 The desired impulse response is specified over some finite time window.

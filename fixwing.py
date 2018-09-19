@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2
 """
 Basic fixed-wing airplane simulator to test out an intuitive model.
 This was a thrown-together messy modification of the software in

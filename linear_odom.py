@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 If you can only measure velocity, how well can you estimate position?
 Examine the case of a 1-DOF linear system, using a Kalman filter as an observer.

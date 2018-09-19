@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Using an EKF for dynamic model estimation of a motor
 sensed with only a cheap encoder. Use the model for

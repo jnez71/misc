@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Value iteration for a finite markov decision process.
 

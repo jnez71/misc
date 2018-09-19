@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 """
 Q-learning for a POMDP. Not the best approach, but fun.
 
