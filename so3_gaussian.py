@@ -8,15 +8,15 @@ import numpy as np; npl = np.linalg
 from scipy.linalg import expm
 
 # Mean SO3 member
-R0 = np.array([[1, 0, 0],
-               [0, 1, 0],
-               [0, 0, 1]])
+R0 = np.array([[ 0,  0, -1],
+               [ 0,  1,  0],
+               [ 1,  0,  0]])
 
 # Covariance matrix is basically for roll-pitch-yaw,
 # need only be positive-definite symmetric
-S = 0.01*np.array([[10, 00, 00],
-                   [00, 10, 00],
-                   [00, 00, 30]])
+S = 0.01*np.array([[1,  0,  0],
+                   [0, 10,  0],
+                   [0,  0, 50]])
 
 # Lie algebra generator
 crossmat = lambda v: np.array([[  0   , -v[2]  ,  v[1] ], 
@@ -25,7 +25,7 @@ crossmat = lambda v: np.array([[  0   , -v[2]  ,  v[1] ],
 
 # Generate samples
 samples = []
-for i in xrange(3000):
+for i in range(3000):
 
     # Sample a random normal (tangent) vector to SO3
     v = np.random.multivariate_normal(np.zeros(3), S)
@@ -35,9 +35,10 @@ for i in xrange(3000):
 
     # Perturb mean
     samples.append(expm(V).dot(R0))
+    #samples.append(R0.dot(expm(V)))
 
 # Transform some point by the SO3 samples to demonstate spread
-p0 = np.array([1, 0, 0])
+p0 = np.array([0, 0, -1])
 points_x, points_y, points_z = zip(*[sample.dot(p0) for sample in samples])
 c = R0.dot(p0)
 
