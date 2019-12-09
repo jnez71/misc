@@ -3,8 +3,8 @@
 Solving a PDE that models finite-strain elastic solids.
 
 """
-import numpy as np
-import pygame
+import numpy as np  # pip3 install --user numpy
+import pygame  # pip3 install --user pygame
 
 ################################################## DOMAIN
 
@@ -14,8 +14,8 @@ ly = 1.0
 lt = np.inf
 
 # Discretization of space and time
-dx = 0.01
-dy = 0.01
+dx = 0.005
+dy = 0.005
 dt = 0.005
 
 # Space and time
@@ -46,13 +46,13 @@ for i in range(nx):
 ################################################## PROPERTIES
 
 # Constitutive stiffness
-K = 1e4
+K = 2e4
 
 # Mass density
-m = 1.2
+m = 0.5
 
 # Damping density
-c = 1.0
+c = 0.01
 
 ################################################## OPERATORS
 
@@ -77,15 +77,49 @@ def div(F):
 
 ################################################## GRAPHICS
 
+# Configuration
+rate = 60  # updates per real second
+color_bg = (0, 0, 0, 255)  # background color
+color_mg = (64, 64, 64, 255)  # midground color
+color_fg = (255, 255, 255, 255)  # foreground color
+res = 10  # grid resolution
 
+# Initialize display
+display = pygame.display.set_mode((3*nx, 3*ny))
+pygame.display.set_caption("JELLO BOI")
+
+# Visualizes a vector field on the global display
+def show(u):
+    global display
+    # Clear
+    display.fill(color_bg)
+    # X grid
+    for i in range(0, nx, nx//res):
+        points_mg = []
+        points_fg = []
+        for j in range(0, ny, ny//res):
+            points_mg.append((ny+j, i))
+            points_fg.append((ny+ny*(u[i, j, 1]+y[j])/ly, nx*(u[i, j, 0]+x[i])/lx))
+        pygame.draw.aalines(display, color_mg, False, points_mg)
+        pygame.draw.aalines(display, color_fg, False, points_fg)
+    # Y grid
+    for j in range(0, ny, ny//res):
+        points_mg = []
+        points_fg = []
+        for i in range(0, nx, nx//res):
+            points_mg.append((ny+j, i))
+            points_fg.append((ny+ny*(u[i, j, 1]+y[j])/ly, nx*(u[i, j, 0]+x[i])/lx))
+        pygame.draw.aalines(display, color_mg, False, points_mg)
+        pygame.draw.aalines(display, color_fg, False, points_fg)
+    # Refresh
+    pygame.display.update()
 
 ################################################## SIMULATION
-
-np.set_printoptions(precision=4, suppress=True)
 
 # Main loop
 running = True
 while running:
+    start_time = pygame.time.get_ticks()
 
     # Boundary conditions
     u[0, :] = 0.0
@@ -95,8 +129,8 @@ while running:
     F[-1, :] = 0.0
 
     # Green strain and Cauchy stress from linear elasticity
-    E = (ttr(F) + F) / 2.0  # eventually try (FF-I)/2
-    S = K*E
+    E = (ttr(F) + F) / 2.0  # ??? try (FF-I)/2
+    S = K*E  # ??? need to use actual tensor field
 
     # Acceleration from conservation of momentum
     a = g + (f - c*v + div(S))/m
@@ -106,5 +140,14 @@ while running:
     u += v*dt + 0.5*a*dt**2
     t += dt
 
+    # User interface
+    show(u)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+            break
 
-    print(u[nx//2, ny//2])
+    # Real time throttle
+    remaining_time = (1000//rate) - (pygame.time.get_ticks() - start_time)
+    if remaining_time > 0:
+        pygame.time.wait(remaining_time)
