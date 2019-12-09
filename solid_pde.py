@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Solving a PDE that models finite-strain elastic solids.
+Solving a PDE that models an elastic solid.
+https://en.wikipedia.org/wiki/Linear_elasticity
+https://en.wikipedia.org/wiki/Finite_strain_theory
 
 """
+import os; os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 import numpy as np  # pip3 install --user numpy
 import pygame  # pip3 install --user pygame
 
@@ -30,7 +33,7 @@ nt = np.inf
 
 ################################################## FIELDS
 
-# Deformation and velocity initial condition
+# Displacement and velocity initial condition
 u = np.zeros((nx, ny, 2), float)
 v = np.zeros((nx, ny, 2), float)
 
@@ -56,18 +59,18 @@ c = 0.01
 
 ################################################## OPERATORS
 
-# Jacobian of a vector field
+# Computes jacobian of the given vector field
 def jac(u):
     ux_x, ux_y = np.gradient(u[:, :, 0])
     uy_x, uy_y = np.gradient(u[:, :, 1])
     return np.reshape(np.dstack((ux_x, ux_y, uy_x, uy_y)),
                       (u.shape[0], u.shape[1], u.shape[2], u.shape[2]))
 
-# Transpose of a tensor field
+# Computes transpose of the given 2-tensor field
 def ttr(F):
     return np.transpose(F, (0, 1, 3, 2))
 
-# Divergence of a tensor field
+# Computes divergence of the given 2-tensor field
 def div(F):
     Fxx_x, _ = np.gradient(F[:, :, 0, 0])
     _, Fxy_y = np.gradient(F[:, :, 0, 1])
@@ -78,11 +81,10 @@ def div(F):
 ################################################## GRAPHICS
 
 # Configuration
-rate = 60  # updates per real second
 color_bg = (0, 0, 0, 255)  # background color
-color_mg = (64, 64, 64, 255)  # midground color
+color_mg = (64, 64, 64, 128)  # midground color
 color_fg = (255, 255, 255, 255)  # foreground color
-res = 10  # grid resolution
+res = 20  # grid resolution
 
 # Initialize display
 display = pygame.display.set_mode((3*nx, 3*ny))
@@ -116,21 +118,28 @@ def show(u):
 
 ################################################## SIMULATION
 
-# Main loop
+# Preparation
 running = True
+print("Running simulation! Close display window or ^C to quit.")
+
+# Main loop
 while running:
+    # Record loop start time (in milliseconds)
     start_time = pygame.time.get_ticks()
 
     # Boundary conditions
     u[0, :] = 0.0
-    F = jac(u)
-    F[:, 0] = 0.0
-    F[:, -1] = 0.0
-    F[-1, :] = 0.0
+    U = jac(u)
+    U[:, 0] = 0.0
+    U[:, -1] = 0.0
+    U[-1, :] = 0.0
+
+    # Update display
+    show(u)
 
     # Green strain and Cauchy stress from linear elasticity
-    E = (ttr(F) + F) / 2.0  # ??? try (FF-I)/2
-    S = K*E  # ??? need to use actual tensor field
+    E = (ttr(U) + U) / 2.0  # ??? can we handle the quadratic term, +U'U/2?
+    S = K*E  # ??? need to use actual tensor field for things like Poisson's ratio
 
     # Acceleration from conservation of momentum
     a = g + (f - c*v + div(S))/m
@@ -140,14 +149,13 @@ while running:
     u += v*dt + 0.5*a*dt**2
     t += dt
 
-    # User interface
-    show(u)
+    # Handle user interface
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
             break
 
     # Real time throttle
-    remaining_time = (1000//rate) - (pygame.time.get_ticks() - start_time)
+    remaining_time = int(1000*dt) - (pygame.time.get_ticks() - start_time)
     if remaining_time > 0:
         pygame.time.wait(remaining_time)
