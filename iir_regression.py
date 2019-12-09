@@ -60,7 +60,7 @@ print("MSE: {}".format(np.sqrt(np.mean(np.square(np.subtract(func(time[samples:]
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
 ax.plot(time, np.concatenate((x, func(time[samples:]))), 'g', linewidth=2, label="Desired Response")
-ax.plot(time, y_pred, 'k', linewidth=1, label="Filter's Response")
+ax.plot(time[samples-1:], y_pred[samples-1:], 'k', linewidth=1, label="Filter's Response")
 ax.set_xlabel("Training Time (left) and Prediction Time (right)", fontsize=22)
 plt.axvline(samples-1)
 plt.legend()
