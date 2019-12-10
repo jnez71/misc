@@ -37,9 +37,6 @@ nt = np.inf
 u = np.zeros((nx, ny, 2), float)
 v = np.zeros((nx, ny, 2), float)
 
-# User force initial condition
-f = np.zeros((nx, ny, 2), float)
-
 # Gravity
 g = np.zeros((nx, ny, 2), float)
 for i in range(nx):
@@ -81,14 +78,23 @@ def div(F):
 ################################################## GRAPHICS
 
 # Configuration
+window = (3*ny, 3*nx)
 color_bg = (0, 0, 0, 255)  # background color
 color_mg = (64, 64, 64, 128)  # midground color
 color_fg = (255, 255, 255, 255)  # foreground color
 res = 20  # grid resolution
 
 # Initialize display
-display = pygame.display.set_mode((3*nx, 3*ny))
+display = pygame.display.set_mode(window)
 pygame.display.set_caption("JELLO BOI")
+
+# Computes the pixel coordinate corresponding to the grid displacement
+def pixel(u, i, j):
+    return (ny + ny*(u[i, j, 1] + y[j])/ly, nx*(u[i, j, 0] + x[i])/lx)
+
+# Inverse of the pixel function
+def invpixel(px, py):
+    return np.array((lx*py/nx - x[i], ly*(px - ny)/ny - y[j]), float)
 
 # Visualizes a vector field on the global display
 def show(u):
@@ -101,7 +107,7 @@ def show(u):
         points_fg = []
         for j in range(0, ny, ny//res):
             points_mg.append((ny+j, i))
-            points_fg.append((ny+ny*(u[i, j, 1]+y[j])/ly, nx*(u[i, j, 0]+x[i])/lx))
+            points_fg.append(pixel(u, i, j))
         pygame.draw.aalines(display, color_mg, False, points_mg)
         pygame.draw.aalines(display, color_fg, False, points_fg)
     # Y grid
@@ -110,7 +116,7 @@ def show(u):
         points_fg = []
         for i in range(0, nx, nx//res):
             points_mg.append((ny+j, i))
-            points_fg.append((ny+ny*(u[i, j, 1]+y[j])/ly, nx*(u[i, j, 0]+x[i])/lx))
+            points_fg.append(pixel(u, i, j))
         pygame.draw.aalines(display, color_mg, False, points_mg)
         pygame.draw.aalines(display, color_fg, False, points_fg)
     # Refresh
@@ -120,7 +126,9 @@ def show(u):
 
 # Preparation
 running = True
-print("Running simulation! Close display window or ^C to quit.")
+print("Running simulation!")
+print("Click to interact. Press 'r' to reset.")
+print("Close display window or ^C to quit.")
 
 # Main loop
 while running:
@@ -134,26 +142,35 @@ while running:
     U[:, -1] = 0.0
     U[-1, :] = 0.0
 
+    # Handle user interface
+    for event in pygame.event.get():
+        # Quit
+        if event.type == pygame.QUIT:
+            running = False
+            break
+        # Reset
+        elif (event.type == pygame.KEYDOWN) and (event.key == pygame.K_r):
+            u = np.zeros_like(u)
+            v = np.zeros_like(v)
+            #U = np.zeros_like(U)  # leaving this out is a... feature
+    # Mouse interaction
+    if pygame.mouse.get_pressed()[0]:
+        u[-5*nx//res:, -5*ny//res:] = invpixel(*pygame.mouse.get_pos()) + (3*lx/res, 3*ly/res)
+        U[-5*nx//res:, -5*ny//res:] = 0.0
     # Update display
     show(u)
 
     # Green strain and Cauchy stress from linear elasticity
     E = (ttr(U) + U) / 2.0  # ??? can we handle the quadratic term, +U'U/2?
-    S = K*E  # ??? need to use actual tensor field for things like Poisson's ratio
+    S = K*E  # ??? need to use actual tensor field for shear stiffness
 
     # Acceleration from conservation of momentum
-    a = g + (f - c*v + div(S))/m
+    a = g + (div(S) - c*v)/m
 
     # Temporal integration
     v += a*dt
     u += v*dt + 0.5*a*dt**2
     t += dt
-
-    # Handle user interface
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-            break
 
     # Real time throttle
     remaining_time = int(1000*dt) - (pygame.time.get_ticks() - start_time)
