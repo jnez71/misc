@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Solving a PDE that models an elastic solid.
+Interactively solving a PDE that models an elastic solid.
 https://en.wikipedia.org/wiki/Linear_elasticity
 https://en.wikipedia.org/wiki/Finite_strain_theory
 
@@ -24,6 +24,7 @@ dt = 0.005
 # Space and time
 x = np.arange(0.0, lx, dx, float)
 y = np.arange(0.0, ly, dy, float)
+xy = np.dstack(np.meshgrid(x, y)[::-1])
 t = 0.0
 
 # Cardinality of discrete space and time
@@ -33,15 +34,24 @@ nt = np.inf
 
 ################################################## FIELDS
 
-# Displacement and velocity initial condition
-u = np.zeros((nx, ny, 2), float)
-v = np.zeros((nx, ny, 2), float)
+# State initial condition
+u = None  # displacement
+v = None  # time derivative
+U = None  # spatial gradient
+r = None  # material
+def initialize():
+    global u, v, U, r
+    u = np.zeros((nx, ny, 2), float)
+    v = np.zeros((nx, ny, 2), float)
+    U = np.zeros((nx, ny, 2, 2), float)
+    r = xy.copy()
+initialize()
 
 # Gravity
 g = np.zeros((nx, ny, 2), float)
 for i in range(nx):
     for j in range(ny):
-        g[i, j] = (1.0, 0.0)
+        g[i, j] = (0.2, 0.0)
 
 ################################################## PROPERTIES
 
@@ -52,7 +62,7 @@ K = 2e4
 m = 0.5
 
 # Damping density
-c = 0.01
+c = 0.1
 
 ################################################## OPERATORS
 
@@ -75,26 +85,53 @@ def div(F):
     _, Fyy_y = np.gradient(F[:, :, 1, 1])
     return np.dstack((Fxx_x+Fxy_y, Fyx_x+Fyy_y))
 
+# Applies boundary conditions to the current state
+def bound():
+    global u, v, U, r
+    # Fixed points
+    u[0, :] = 0.0
+    v[0, :] = 0.0
+
+    ## Wall collisions
+    #xlim = 0.0
+    #ylim = -(ly/2.0)*(window_scale-1)
+    #esc_x = np.where(r[:, :, 0] < xlim)
+    #u[esc_x[0], esc_x[1], 0] = xlim - xy[esc_x[0], esc_x[1], 0] + dx
+    #esc_y = np.where(r[:, :, 1] < ylim)
+    #u[esc_y[0], esc_y[1], 1] = ylim - xy[esc_y[0], esc_y[1], 0] + dy
+
+    # Compute spatial gradient
+    U = jac(u)
+    # Free surfaces
+    U[:, 0] = 0.0
+    U[:, -1] = 0.0
+    U[-1, :] = 0.0
+    # Material coordinates
+    r = u + xy
+
 ################################################## GRAPHICS
 
 # Configuration
-window = (3*ny, 3*nx)
+window_scale = 5
+window = (window_scale*ny, window_scale*nx)
 color_bg = (0, 0, 0, 255)  # background color
-color_mg = (64, 64, 64, 128)  # midground color
 color_fg = (255, 255, 255, 255)  # foreground color
 res = 20  # grid resolution
+grab_size = 2
 
 # Initialize display
 display = pygame.display.set_mode(window)
 pygame.display.set_caption("JELLO BOI")
 
-# Computes the pixel coordinate corresponding to the grid displacement
-def pixel(u, i, j):
-    return (ny + ny*(u[i, j, 1] + y[j])/ly, nx*(u[i, j, 0] + x[i])/lx)
+# Computes the pixel coordinate corresponding to the material coordinate
+def pixel(rij):
+    return ((window[0]-ny)/2 + ny*rij[1]/ly,
+            nx*rij[0]/lx)
 
 # Inverse of the pixel function
-def invpixel(px, py):
-    return np.array((lx*py/nx - x[i], ly*(px - ny)/ny - y[j]), float)
+def invpixel(pij):
+    return np.array((lx*pij[1]/nx,
+                     ly*(pij[0] - (window[0]-ny)/2)/ny), float)
 
 # Visualizes a vector field on the global display
 def show(u):
@@ -103,22 +140,12 @@ def show(u):
     display.fill(color_bg)
     # X grid
     for i in range(0, nx, nx//res):
-        points_mg = []
-        points_fg = []
-        for j in range(0, ny, ny//res):
-            points_mg.append((ny+j, i))
-            points_fg.append(pixel(u, i, j))
-        pygame.draw.aalines(display, color_mg, False, points_mg)
-        pygame.draw.aalines(display, color_fg, False, points_fg)
+        points = [pixel(r[i, j]) for j in range(0, ny, ny//res)]
+        pygame.draw.aalines(display, color_fg, False, points)
     # Y grid
     for j in range(0, ny, ny//res):
-        points_mg = []
-        points_fg = []
-        for i in range(0, nx, nx//res):
-            points_mg.append((ny+j, i))
-            points_fg.append(pixel(u, i, j))
-        pygame.draw.aalines(display, color_mg, False, points_mg)
-        pygame.draw.aalines(display, color_fg, False, points_fg)
+        points = [pixel(r[i, j]) for i in range(0, nx, nx//res)]
+        pygame.draw.aalines(display, color_fg, False, points)
     # Refresh
     pygame.display.update()
 
@@ -135,28 +162,24 @@ while running:
     # Record loop start time (in milliseconds)
     start_time = pygame.time.get_ticks()
 
-    # Boundary conditions
-    u[0, :] = 0.0
-    U = jac(u)
-    U[:, 0] = 0.0
-    U[:, -1] = 0.0
-    U[-1, :] = 0.0
-
-    # Handle user interface
+    # Administrative interface
     for event in pygame.event.get():
-        # Quit
         if event.type == pygame.QUIT:
+            # Quit
             running = False
             break
-        # Reset
         elif (event.type == pygame.KEYDOWN) and (event.key == pygame.K_r):
-            u = np.zeros_like(u)
-            v = np.zeros_like(v)
-            #U = np.zeros_like(U)  # leaving this out is a... feature
-    # Mouse interaction
+            # Reset
+            initialize()
+
+    # Interactions
     if pygame.mouse.get_pressed()[0]:
-        u[-5*nx//res:, -5*ny//res:] = invpixel(*pygame.mouse.get_pos()) + (3*lx/res, 3*ly/res)
-        U[-5*nx//res:, -5*ny//res:] = 0.0
+        # Mouse interaction drags rigid sub-block
+        select = np.s_[-grab_size*nx//res:, -grab_size*ny//res:]
+        u[select] = invpixel(pygame.mouse.get_pos()) - (lx, ly)
+        v[select] = 0.0
+    bound()
+
     # Update display
     show(u)
 
