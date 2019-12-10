@@ -79,10 +79,10 @@ def ttr(F):
 
 # Computes divergence of the given 2-tensor field
 def div(F):
-    Fxx_x, _ = np.gradient(F[:, :, 0, 0])
-    _, Fxy_y = np.gradient(F[:, :, 0, 1])
-    Fyx_x, _ = np.gradient(F[:, :, 1, 0])
-    _, Fyy_y = np.gradient(F[:, :, 1, 1])
+    Fxx_x = np.gradient(F[:, :, 0, 0], axis=0)
+    Fxy_y = np.gradient(F[:, :, 0, 1], axis=1)
+    Fyx_x = np.gradient(F[:, :, 1, 0], axis=0)
+    Fyy_y = np.gradient(F[:, :, 1, 1], axis=1)
     return np.dstack((Fxx_x+Fxy_y, Fyx_x+Fyy_y))
 
 # Applies boundary conditions to the current state
