@@ -56,7 +56,10 @@ for i in range(nx):
 ################################################## PROPERTIES
 
 # Constitutive stiffness
-K = 2e4
+K = 2e4  # scalar for simplicity, but restricts that tensile modulus == shear modulus
+
+# Poisson's ratio
+k = 0.0
 
 # Mass density
 m = 0.5
@@ -184,8 +187,8 @@ while running:
     show(u)
 
     # Green strain and Cauchy stress from linear elasticity
-    E = (ttr(U) + U) / 2.0  # ??? can we handle the quadratic term, +U'U/2?
-    S = K*E  # ??? need to use actual tensor field for shear stiffness
+    E = (ttr(U) + U) / 2.0  # leaving out finite-strain quadratic term: +U'U/2
+    S = K*(E + k*E[:, :, ::-1, ::-1])
 
     # Acceleration from conservation of momentum
     a = g + (div(S) - c*v)/m
