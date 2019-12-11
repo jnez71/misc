@@ -22,8 +22,8 @@ dy = 0.005
 dt = 0.005
 
 # Space and time
-x = np.arange(0.0, lx, dx, float)
-y = np.arange(0.0, ly, dy, float)
+x = np.arange(0.0, lx+dx, dx, float)
+y = np.arange(0.0, ly+dy, dy, float)
 xy = np.dstack(np.meshgrid(x, y)[::-1])
 t = 0.0
 
@@ -94,6 +94,11 @@ def bound():
     # Fixed points
     u[0, :] = 0.0
     v[0, :] = 0.0
+    # Corner cases
+    u[-1, 0] = (u[-3, 0] + u[-1, 2]) / 2.0
+    u[-1, -1] = (u[-3, -1] + u[-1, -3]) / 2.0
+    v[-1, 0] = (v[-3, 0] + v[-1, 2]) / 2.0
+    v[-1, -1] = (v[-3, -1] + v[-1, -3]) / 2.0
 
     ## Wall collisions
     #xlim = 0.0
