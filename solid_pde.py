@@ -4,10 +4,17 @@ Interactively solving a PDE that models an elastic solid.
 https://en.wikipedia.org/wiki/Linear_elasticity
 https://en.wikipedia.org/wiki/Finite_strain_theory
 
+DEPENDENCIES:
+sudo apt install python3 python3-pip
+pip3 install --user numpy pygame
+
 """
+# Math
+import numpy as np
+
+# Visualization
 import os; os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
-import numpy as np  # pip3 install --user numpy
-import pygame  # pip3 install --user pygame
+import pygame
 
 ################################################## DOMAIN
 
@@ -19,7 +26,7 @@ lt = np.inf
 # Discretization of space and time
 dx = 0.005
 dy = 0.005
-dt = 0.005
+dt = 0.002
 
 # Space and time
 x = np.arange(0.0, lx+dx, dx, float)
@@ -55,11 +62,11 @@ for i in range(nx):
 
 ################################################## PROPERTIES
 
-# Constitutive stiffness
-K = 2e4  # scalar for simplicity, but restricts that tensile modulus == shear modulus
+# Young's modulus (stiffness)
+s = 8e4
 
-# Poisson's ratio
-k = 0.0
+# Poisson's ratio (contractivity)
+k = 0.1
 
 # Mass density
 m = 0.5
@@ -69,24 +76,28 @@ c = 0.1
 
 ################################################## OPERATORS
 
-# Computes jacobian of the given vector field
-def jac(u):
+# Computes the jacobian of the given vector field
+def jacobian(u):
     ux_x, ux_y = np.gradient(u[:, :, 0])
     uy_x, uy_y = np.gradient(u[:, :, 1])
     return np.reshape(np.dstack((ux_x, ux_y, uy_x, uy_y)),
                       (u.shape[0], u.shape[1], u.shape[2], u.shape[2]))
 
-# Computes transpose of the given 2-tensor field
-def ttr(F):
-    return np.transpose(F, (0, 1, 3, 2))
-
-# Computes divergence of the given 2-tensor field
-def div(F):
+# Computes the divergence of the given 2-tensor field
+def divergence(F):
     Fxx_x = np.gradient(F[:, :, 0, 0], axis=0)
     Fxy_y = np.gradient(F[:, :, 0, 1], axis=1)
     Fyx_x = np.gradient(F[:, :, 1, 0], axis=0)
     Fyy_y = np.gradient(F[:, :, 1, 1], axis=1)
     return np.dstack((Fxx_x+Fxy_y, Fyx_x+Fyy_y))
+
+# Returns the transpose of the given 2-tensor field
+def transpose(F):
+    return np.transpose(F, (0, 1, 3, 2))
+
+# Computes the trace of the given 2-tensor field
+def trace(F):
+    return np.trace(F, axis1=2, axis2=3)[:, :, np.newaxis, np.newaxis]
 
 # Applies boundary conditions to the current state
 def bound():
@@ -99,17 +110,8 @@ def bound():
     u[-1, -1] = (u[-3, -1] + u[-1, -3]) / 2.0
     v[-1, 0] = (v[-3, 0] + v[-1, 2]) / 2.0
     v[-1, -1] = (v[-3, -1] + v[-1, -3]) / 2.0
-
-    ## Wall collisions
-    #xlim = 0.0
-    #ylim = -(ly/2.0)*(window_scale-1)
-    #esc_x = np.where(r[:, :, 0] < xlim)
-    #u[esc_x[0], esc_x[1], 0] = xlim - xy[esc_x[0], esc_x[1], 0] + dx
-    #esc_y = np.where(r[:, :, 1] < ylim)
-    #u[esc_y[0], esc_y[1], 1] = ylim - xy[esc_y[0], esc_y[1], 0] + dy
-
     # Compute spatial gradient
-    U = jac(u)
+    U = jacobian(u)
     # Free surfaces
     U[:, 0] = 0.0
     U[:, -1] = 0.0
@@ -191,12 +193,19 @@ while running:
     # Update display
     show(u)
 
-    # Green strain and Cauchy stress from linear elasticity
-    E = (ttr(U) + U) / 2.0  # leaving out finite-strain quadratic term: +U'U/2
-    S = K*(E + k*E[:, :, ::-1, ::-1])
+    # Green strain tensor
+    # (https://www.continuummechanics.org/greenstrain.html)
+    E = U + transpose(U)  # linear term
+    #E += np.einsum("ijkl,ijkm->ijlm", U, U)  # quadratic term
+    E /= 2.0  # engineering convention
+
+    # Cauchy stress tensor
+    # (https://en.wikipedia.org/wiki/Hooke%27s_law#Linear_elasticity_theory_for_continuous_media)
+    S = (s/(1.0+k)) * E
+    S[:, :, [[0, 1]], [[0, 1]]] += (s*k/((1.0+k)*(1.0-2.0*k))) * trace(E)
 
     # Acceleration from conservation of momentum
-    a = g + (div(S) - c*v)/m
+    a = g + (divergence(S) - c*v)/m
 
     # Temporal integration
     v += a*dt
