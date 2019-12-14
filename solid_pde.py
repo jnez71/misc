@@ -24,14 +24,14 @@ ly = 1.0
 lt = np.inf
 
 # Discretization of space and time
-dx = 0.005
-dy = 0.005
-dt = 0.002
+dx = 0.015
+dy = 0.015
+dt = 0.0003
 
 # Space and time
 x = np.arange(0.0, lx+dx, dx, float)
 y = np.arange(0.0, ly+dy, dy, float)
-xy = np.dstack(np.meshgrid(x, y)[::-1])
+xy = np.dstack(np.meshgrid(y, x)[::-1])
 t = 0.0
 
 # Cardinality of discrete space and time
@@ -63,16 +63,16 @@ for i in range(nx):
 ################################################## PROPERTIES
 
 # Young's modulus (stiffness)
-s = 8e4
+s = 1e6
 
 # Poisson's ratio (contractivity)
-k = 0.1
+k = 0.15
 
 # Mass density
-m = 0.5
+m = 0.1
 
 # Damping density
-c = 0.1
+c = 4.0
 
 ################################################## OPERATORS
 
@@ -122,26 +122,26 @@ def bound():
 ################################################## GRAPHICS
 
 # Configuration
-window_scale = 5
-window = (window_scale*ny, window_scale*nx)
+mat = (300*nx/ny, 300)  # rectangular shape of material
+env = (1000, 1500)  # rectangular shape of ambient environment
+res = 16  # material grid resolution
+grab_size = 4  # length of sub-block grabbable by user
 color_bg = (0, 0, 0, 255)  # background color
 color_fg = (255, 255, 255, 255)  # foreground color
-res = 20  # grid resolution
-grab_size = 2
 
 # Initialize display
-display = pygame.display.set_mode(window)
+display = pygame.display.set_mode(env[::-1])
 pygame.display.set_caption("JELLO BOI")
 
 # Computes the pixel coordinate corresponding to the material coordinate
 def pixel(rij):
-    return ((window[0]-ny)/2 + ny*rij[1]/ly,
-            nx*rij[0]/lx)
+    return ((env[1]-mat[1])/2 + mat[1]*rij[1]/ly,
+            mat[0]*rij[0]/lx)
 
 # Inverse of the pixel function
 def invpixel(pij):
-    return np.array((lx*pij[1]/nx,
-                     ly*(pij[0] - (window[0]-ny)/2)/ny), float)
+    return np.array((lx*pij[1]/mat[0],
+                     ly*(pij[0] - (env[1]-mat[1])/2)/mat[1]), float)
 
 # Visualizes a vector field on the global display
 def show(u):
@@ -186,6 +186,7 @@ while running:
     if pygame.mouse.get_pressed()[0]:
         # Mouse interaction drags rigid sub-block
         select = np.s_[-grab_size*nx//res:, -grab_size*ny//res:]
+        #select = np.s_[-2*nx//res:, :]
         u[select] = invpixel(pygame.mouse.get_pos()) - (lx, ly)
         v[select] = 0.0
     bound()
