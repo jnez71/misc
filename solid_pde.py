@@ -126,8 +126,7 @@ mat = (300*nx/ny, 300)  # rectangular shape of material
 env = (1000, 1500)  # rectangular shape of ambient environment
 res = 16  # material grid resolution
 grab_size = 4  # length of sub-block grabbable by user
-color_bg = (0, 0, 0, 255)  # background color
-color_fg = (255, 255, 255, 255)  # foreground color
+pretty = True  # whether or not to use pretty colors
 
 # Initialize display
 display = pygame.display.set_mode(env[::-1])
@@ -143,29 +142,40 @@ def invpixel(pij):
     return np.array((lx*pij[1]/mat[0],
                      ly*(pij[0] - (env[1]-mat[1])/2)/mat[1]), float)
 
+# Computes the color associated with the given intensity scale
+def color(scale):
+    if pretty:
+        return tuple(255*np.clip((scale, 1.0-scale**2, 1.0-scale, 1.0), 0.0, 1.0))
+    else:
+        return (255, 255, 255, 255)
+
 # Visualizes a vector field on the global display
 def show(u):
     global display
     # Clear
-    display.fill(color_bg)
+    display.fill((0, 0, 0, 255))
     # X grid
     for i in range(0, nx, nx//res):
         points = [pixel(r[i, j]) for j in range(0, ny, ny//res)]
-        pygame.draw.aalines(display, color_fg, False, points)
+        pygame.draw.aalines(display, color(np.linalg.norm(u[i, :])/(0.25*ny)), False, points)
     # Y grid
     for j in range(0, ny, ny//res):
         points = [pixel(r[i, j]) for i in range(0, nx, nx//res)]
-        pygame.draw.aalines(display, color_fg, False, points)
+        pygame.draw.aalines(display, color(np.linalg.norm(u[:, j])/(0.25*nx)), False, points)
     # Refresh
     pygame.display.update()
 
 ################################################## SIMULATION
 
 # Preparation
-running = True
 print("Running simulation!")
-print("Click to interact. Press 'r' to reset.")
-print("Close display window or ^C to quit.")
+print("-------------------")
+print("Click: interact")
+print("Close: quit")
+print("    c: toggle color")
+print("    r: reset")
+print("-------------------")
+running = True
 
 # Main loop
 while running:
@@ -178,15 +188,20 @@ while running:
             # Quit
             running = False
             break
-        elif (event.type == pygame.KEYDOWN) and (event.key == pygame.K_r):
-            # Reset
-            initialize()
+        elif event.type == pygame.KEYDOWN:
+            # Button presses
+            if event.key == pygame.K_r:
+                # Reset
+                initialize()
+            elif event.key == pygame.K_c:
+                # Toggle pretty colors
+                pretty = not pretty
 
     # Interactions
     if pygame.mouse.get_pressed()[0]:
         # Mouse interaction drags rigid sub-block
-        select = np.s_[-grab_size*nx//res:, -grab_size*ny//res:]
-        #select = np.s_[-2*nx//res:, :]
+        #select = np.s_[-grab_size*nx//res:, -grab_size*ny//res:]
+        select = np.s_[-2*nx//res:, :]
         u[select] = invpixel(pygame.mouse.get_pos()) - (lx, ly)
         v[select] = 0.0
     bound()
