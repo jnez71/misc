@@ -26,7 +26,7 @@ lt = np.inf
 # Discretization of space and time
 dx = 0.015
 dy = 0.015
-dt = 0.0003
+dt = 0.0002
 
 # Space and time
 x = np.arange(0.0, lx+dx, dx, float)
@@ -55,10 +55,11 @@ def initialize():
 initialize()
 
 # Gravity
-g = np.zeros((nx, ny, 2), float)
-for i in range(nx):
-    for j in range(ny):
-        g[i, j] = (0.2, 0.0)
+g = 0.0
+f = np.zeros((nx, ny, 2), float)
+for i in range(1, nx-1):
+    for j in range(1, ny-1):
+        f[i, j] = (1.0, 0.0)
 
 ################################################## PROPERTIES
 
@@ -122,15 +123,19 @@ def bound():
 ################################################## GRAPHICS
 
 # Configuration
+rate = 60  # updates per real second
 mat = (300*nx/ny, 300)  # rectangular shape of material
 env = (1000, 1500)  # rectangular shape of ambient environment
 res = 16  # material grid resolution
-grab_size = 4  # length of sub-block grabbable by user
+xgrab, ygrab = 4, 4  # shape of sub-block grabbable by user
 pretty = True  # whether or not to use pretty colors
+fontsize = 25  # size of font in pixels for drawn text
 
 # Initialize display
 display = pygame.display.set_mode(env[::-1])
 pygame.display.set_caption("JELLO BOI")
+pygame.font.init()
+font = pygame.font.SysFont("freemono", fontsize)
 
 # Computes the pixel coordinate corresponding to the material coordinate
 def pixel(rij):
@@ -143,7 +148,7 @@ def invpixel(pij):
                      ly*(pij[0] - (env[1]-mat[1])/2)/mat[1]), float)
 
 # Computes the color associated with the given intensity scale
-def color(scale):
+def scolor(scale):
     if pretty:
         return tuple(255*np.clip((scale, 1.0-scale**2, 1.0-scale, 1.0), 0.0, 1.0))
     else:
@@ -154,14 +159,30 @@ def show(u):
     global display
     # Clear
     display.fill((0, 0, 0, 255))
-    # X grid
+    # Horizontal grid
     for i in range(0, nx, nx//res):
         points = [pixel(r[i, j]) for j in range(0, ny, ny//res)]
-        pygame.draw.aalines(display, color(np.linalg.norm(u[i, :])/(0.25*ny)), False, points)
-    # Y grid
+        pygame.draw.aalines(display, scolor(np.linalg.norm(u[i, :])/(0.25*ny)), False, points)
+    # Vertical grid
     for j in range(0, ny, ny//res):
         points = [pixel(r[i, j]) for i in range(0, nx, nx//res)]
-        pygame.draw.aalines(display, color(np.linalg.norm(u[:, j])/(0.25*nx)), False, points)
+        pygame.draw.aalines(display, scolor(np.linalg.norm(u[:, j])/(0.25*nx)), False, points)
+    # Textual information
+    image = font.render("    score: {}".format(score), True, (255, 255, 0, 255))
+    display.blit(image, (10, 0))
+    for i, text in enumerate(("stiffness: {}".format(s/1e3),
+                              "squeeeesh: {}".format(k),
+                              "  inertia: {}".format(m),
+                              "  damping: {}".format(c),
+                              "  gravity: {}".format(g/1e3),
+                              "   v_grab: {}".format(xgrab-1),
+                              "   h_grab: {}".format(ygrab-1))):
+        if i == menu:
+            color = (0, 255, 0, 255)
+        else:
+            color = (200, 200, 200, 200)
+        image = font.render(text, True, color)
+        display.blit(image, (10, (i+1)*(fontsize+5)))
     # Refresh
     pygame.display.update()
 
@@ -171,10 +192,13 @@ def show(u):
 print("Running simulation!")
 print("-------------------")
 print("Click: interact")
-print("Close: quit")
+print("Arrow: properties")
+print("    q: terminate")
 print("    c: toggle color")
 print("    r: reset")
 print("-------------------")
+score = 0
+menu = 0
 running = True
 
 # Main loop
@@ -183,6 +207,7 @@ while running:
     start_time = pygame.time.get_ticks()
 
     # Administrative interface
+    action = 0
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             # Quit
@@ -190,19 +215,48 @@ while running:
             break
         elif event.type == pygame.KEYDOWN:
             # Button presses
-            if event.key == pygame.K_r:
+            if event.key == pygame.K_q:
+                # Quit
+                running = False
+            elif event.key == pygame.K_r:
                 # Reset
                 initialize()
             elif event.key == pygame.K_c:
-                # Toggle pretty colors
+                # Toggle colors
                 pretty = not pretty
+            elif event.key == pygame.K_UP:
+                # Ascend menu
+                menu = (menu - 1) % 7
+            elif event.key == pygame.K_DOWN:
+                # Descend menu
+                menu = (menu + 1) % 7
+            elif event.key == pygame.K_RIGHT:
+                # Increase property
+                action = 1
+            elif event.key == pygame.K_LEFT:
+                # Decrease property
+                action = -1
+    # Apply menu action
+    if menu == 0:
+        s = np.round(np.clip(s + action*5e4, 0.0, 2e6), 6)
+    elif menu == 1:
+        k = np.round(np.clip(k + action*0.05, -0.4, 0.4), 6)
+    elif menu == 2:
+        m = np.round(np.clip(m + action*0.1, 0.05, 10.0), 6)
+    elif menu == 3:
+        c = np.round(np.clip(c + action*0.1, 0.0, 10.0), 6)
+    elif menu == 4:
+        g = np.round(np.clip(g + action*1e3, -3e3, 1e4), 6)
+    elif menu == 5:
+        xgrab = int(np.clip(xgrab + action, 0, res))
+    elif menu == 6:
+        ygrab = int(np.clip(ygrab + action, 0, res))
 
     # Interactions
     if pygame.mouse.get_pressed()[0]:
         # Mouse interaction drags rigid sub-block
-        #select = np.s_[-grab_size*nx//res:, -grab_size*ny//res:]
-        select = np.s_[-2*nx//res:, :]
-        u[select] = invpixel(pygame.mouse.get_pos()) - (lx, ly)
+        select = np.s_[-xgrab*nx//res:, -ygrab*ny//res:]
+        u[select] = invpixel(pygame.mouse.get_pos()) - (lx, ly) + (lx/res, ly/res)
         v[select] = 0.0
     bound()
 
@@ -221,7 +275,7 @@ while running:
     S[:, :, [[0, 1]], [[0, 1]]] += (s*k/((1.0+k)*(1.0-2.0*k))) * trace(E)
 
     # Acceleration from conservation of momentum
-    a = g + (divergence(S) - c*v)/m
+    a = g*f + (divergence(S) - c*v)/m
 
     # Temporal integration
     v += a*dt
@@ -229,6 +283,8 @@ while running:
     t += dt
 
     # Real time throttle
-    remaining_time = int(1000*dt) - (pygame.time.get_ticks() - start_time)
+    remaining_time = (1000//rate) - (pygame.time.get_ticks() - start_time)
     if remaining_time > 0:
         pygame.time.wait(remaining_time)
+
+print("Finished! Your final score was: {}".format(score))
