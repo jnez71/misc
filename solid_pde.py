@@ -29,8 +29,8 @@ dy = 0.015
 dt = 0.0002
 
 # Space and time
-x = np.arange(0.0, lx+dx, dx, float)
-y = np.arange(0.0, ly+dy, dy, float)
+x = np.arange(0.0, lx, dx, float)
+y = np.arange(0.0, ly, dy, float)
 xy = np.dstack(np.meshgrid(y, x)[::-1])
 t = 0.0
 
@@ -57,8 +57,8 @@ initialize()
 # Gravity
 g = 0.0
 f = np.zeros((nx, ny, 2), float)
-for i in range(1, nx-1):
-    for j in range(1, ny-1):
+for i in range(nx):
+    for j in range(ny):
         f[i, j] = (1.0, 0.0)
 
 ################################################## PROPERTIES
@@ -107,10 +107,10 @@ def bound():
     u[0, :] = 0.0
     v[0, :] = 0.0
     # Corner cases
-    u[-1, 0] = (u[-3, 0] + u[-1, 2]) / 2.0
-    u[-1, -1] = (u[-3, -1] + u[-1, -3]) / 2.0
-    v[-1, 0] = (v[-3, 0] + v[-1, 2]) / 2.0
-    v[-1, -1] = (v[-3, -1] + v[-1, -3]) / 2.0
+    u[-2:, 0] = (u[-3, 0] + u[-1, 2]) / 2.0
+    u[-2:, -1] = (u[-3, -1] + u[-1, -3]) / 2.0
+    v[-2:, 0] = (v[-3, 0] + v[-1, 2]) / 2.0
+    v[-2:, -1] = (v[-3, -1] + v[-1, -3]) / 2.0
     # Compute spatial gradient
     U = jacobian(u)
     # Free surfaces
