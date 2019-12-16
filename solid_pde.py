@@ -120,6 +120,12 @@ def bound():
     # Material coordinates
     r = u + xy
 
+# The judge decides the score
+np.random.seed(0)
+morals = np.random.uniform(-1.0, 1.0, v.size)
+def judge():
+    return morals.dot((v - np.mean(v)).flatten()) > 500
+
 ################################################## GRAPHICS
 
 # Configuration
@@ -281,6 +287,9 @@ while running:
     v += a*dt
     u += v*dt + 0.5*a*dt**2
     t += dt
+
+    # Update score
+    score += judge()
 
     # Real time throttle
     remaining_time = (1000//rate) - (pygame.time.get_ticks() - start_time)
