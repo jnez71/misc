@@ -14,7 +14,15 @@ import numpy as np
 
 # Visualization
 import os; os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
-import pygame
+try:
+    # For mobile devices
+    import pygame_sdl2 as pygame
+    pygame.import_as_pygame()
+    mobile = True
+except ImportError:
+    # For desktop devices
+    import pygame
+    mobile = False
 
 ################################################## DOMAIN
 
@@ -197,11 +205,12 @@ def show(u):
 # Preparation
 print("Running simulation!")
 print("-------------------")
-print("Click: interact")
-print("Arrow: properties")
-print("    q: terminate")
-print("    c: toggle color")
+print("Click: grab")
+print("Arrow: menu")
+print("    q: quit")
 print("    r: reset")
+print("    c: color")
+print("    f: fullscreen")
 print("-------------------")
 score = 0
 menu = 0
@@ -227,19 +236,22 @@ while running:
             elif event.key == pygame.K_r:
                 # Reset
                 initialize()
+            elif event.key == pygame.K_f:
+                # Toggle full-screen
+                pygame.display.toggle_fullscreen()
             elif event.key == pygame.K_c:
                 # Toggle colors
                 pretty = not pretty
-            elif event.key == pygame.K_UP:
+            elif event.key in (pygame.K_UP, pygame.K_w):
                 # Ascend menu
                 menu = (menu - 1) % 7
-            elif event.key == pygame.K_DOWN:
+            elif event.key in (pygame.K_DOWN, pygame.K_s):
                 # Descend menu
                 menu = (menu + 1) % 7
-            elif event.key == pygame.K_RIGHT:
+            elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 # Increase property
                 action = 1
-            elif event.key == pygame.K_LEFT:
+            elif event.key in (pygame.K_LEFT, pygame.K_a):
                 # Decrease property
                 action = -1
     # Apply menu action
