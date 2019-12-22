@@ -111,28 +111,43 @@ def trace(F):
 # Applies boundary conditions to the current state
 def bound():
     global u, v, U, r
-    # Fixed points
-    u[0, :] = 0.0
-    v[0, :] = 0.0
     # Corner cases
+    u[0, 0] = (u[2, 0] + u[0, 2]) / 2.0
+    u[0, -1] = (u[0, -3] + u[3, -1]) / 2.0
     u[-2:, 0] = (u[-3, 0] + u[-1, 2]) / 2.0
     u[-2:, -1] = (u[-3, -1] + u[-1, -3]) / 2.0
+    v[0, 0] = (v[2, 0] + v[0, 2]) / 2.0
+    v[0, -1] = (v[0, -3] + v[3, -1]) / 2.0
     v[-2:, 0] = (v[-3, 0] + v[-1, 2]) / 2.0
     v[-2:, -1] = (v[-3, -1] + v[-1, -3]) / 2.0
+    # Fixed points
+    if mode == 0:
+        fixed = np.s_[0, :]
+    elif mode == 1:
+        fixed = np.s_[nx//2-3:nx//2+3, ny//2-3:ny//2+3]
+    u[fixed] = 0.0
+    v[fixed] = 0.0
     # Compute spatial gradient
     U = jacobian(u)
     # Free surfaces
+    if mode == 1:
+        U[0, :] = 0.0
     U[:, 0] = 0.0
     U[:, -1] = 0.0
     U[-1, :] = 0.0
     # Material coordinates
     r = u + xy
 
+modes = ["beam", "pinned"]
+mode = 0
+
 # The judge decides the score
 np.random.seed(0)
 morals = np.random.uniform(-1.0, 1.0, v.size)
 def judge():
     return morals.dot((v - np.mean(v)).flatten()) > 500
+
+score = 0
 
 ################################################## GRAPHICS
 
@@ -154,11 +169,11 @@ font = pygame.font.SysFont("freemono", fontsize)
 # Computes the pixel coordinate corresponding to the material coordinate
 def pixel(rij):
     return ((env[1]-mat[1])/2 + mat[1]*rij[1]/ly,
-            mat[0]*rij[0]/lx)
+            (env[0]/2-mat[0])/2 + mat[0]*rij[0]/lx)
 
 # Inverse of the pixel function
 def invpixel(pij):
-    return np.array((lx*pij[1]/mat[0],
+    return np.array((lx*(pij[1] - (env[0]/2-mat[0])/2)/mat[0],
                      ly*(pij[0] - (env[1]-mat[1])/2)/mat[1]), float)
 
 # Computes the color associated with the given intensity scale
@@ -190,7 +205,8 @@ def show(u):
                               "  damping: {}".format(c),
                               "  gravity: {}".format(g/1e3),
                               "   v_grab: {}".format(xgrab-1),
-                              "   h_grab: {}".format(ygrab-1))):
+                              "   h_grab: {}".format(ygrab-1),
+                              "     mode: {}".format(modes[mode]))):
         if i == menu:
             color = (0, 255, 0, 255)
         else:
@@ -199,6 +215,8 @@ def show(u):
         display.blit(image, (10, (i+1)*(fontsize+5)))
     # Refresh
     pygame.display.update()
+
+menu = 0
 
 ################################################## SIMULATION
 
@@ -212,8 +230,6 @@ print("    r: reset")
 print("    c: color")
 print("    f: fullscreen")
 print("-------------------")
-score = 0
-menu = 0
 running = True
 
 # Main loop
@@ -244,10 +260,10 @@ while running:
                 pretty = not pretty
             elif event.key in (pygame.K_UP, pygame.K_w):
                 # Ascend menu
-                menu = (menu - 1) % 7
+                menu = (menu - 1) % 8
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 # Descend menu
-                menu = (menu + 1) % 7
+                menu = (menu + 1) % 8
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 # Increase property
                 action = 1
@@ -269,6 +285,8 @@ while running:
         xgrab = int(np.clip(xgrab + action, 0, res))
     elif menu == 6:
         ygrab = int(np.clip(ygrab + action, 0, res))
+    elif menu == 7:
+        mode = (mode + action) % 2
 
     # Interactions
     if pygame.mouse.get_pressed()[0]:
