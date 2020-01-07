@@ -12,20 +12,20 @@ from matplotlib import pyplot
 # Efficient practical usage
 def fft(values, dt):
     freqs = np.fft.rfftfreq(len(values), dt)
-    coeffs = np.sqrt(2/len(values)) * np.fft.rfft(values)  # scaled for unitarity
-    coeffs[0] /= np.sqrt(2)  # don't "double count" the DC alias
+    coeffs = np.sqrt(2.0/len(values)) * np.fft.rfft(values)  # scaled for unitarity
+    coeffs[0] /= np.sqrt(2.0)  # don't "double count" the DC alias
     return (freqs, coeffs)
 
 # Working principle
 def dtft(values, dt):
     times = dt * np.arange(len(values))
-    nyquist = 1/(2*dt)
-    dw = 1/(dt*len(values))
-    freqs = np.arange(0.0, nyquist+dw, dw)
-    #                         (rad/s)/Hz      all w*t products
-    dtft_matrix = np.exp(-1j * (2*np.pi) * np.outer(freqs, times))
-    coeffs = np.sqrt(2/len(values)) * dtft_matrix.dot(values)  # scaled for unitarity
-    coeffs[0] /= np.sqrt(2)  # don't "double count" the DC alias
+    nyquist = 1.0/(2.0*dt)
+    df = nyquist / (len(values)/2.0)
+    freqs = np.arange(0.0, nyquist+df, df)
+    #                         (rad/s)/Hz      all f*t products
+    dtft_matrix = np.exp(-1j * (2.0*np.pi) * np.outer(freqs, times))
+    coeffs = np.sqrt(2.0/len(values)) * dtft_matrix.dot(values)  # scaled for unitarity
+    coeffs[0] /= np.sqrt(2.0)  # don't "double count" the DC alias
     return (freqs, coeffs)
 
 ##################################################
