@@ -302,7 +302,7 @@ while running:
     # Green strain tensor
     # (https://www.continuummechanics.org/greenstrain.html)
     E = U + transpose(U)  # linear term
-    #E += np.einsum("ijkl,ijkm->ijlm", U, U)  # quadratic term
+    #E += np.einsum("ijkl,ijkm->ijlm", U, U)  # quadratic term ?
     E /= 2.0  # engineering convention
 
     # Cauchy stress tensor
@@ -311,7 +311,7 @@ while running:
     S[:, :, [[0, 1]], [[0, 1]]] += (s*k/((1.0+k)*(1.0-2.0*k))) * trace(E)
 
     # Acceleration from conservation of momentum
-    a = g*f + (divergence(S) - c*v)/m
+    a = g*f + (divergence(S) - c*v)/m #- np.einsum("ijkl,ijl->ijk", jacobian(v), v)  # convection term?
 
     # Temporal integration
     v += a*dt
