@@ -1,7 +1,6 @@
 #!/usr/bin/env python2
 """
-Demonstration of the benefit of local-linearization integration for solving
-ODE's. Say goodbye to Euler and RK4.
+Demonstration of the benefit of exponential (local-linearization) integration for solving ODE's.
 
 """
 from __future__ import division

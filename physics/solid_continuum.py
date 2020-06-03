@@ -9,11 +9,12 @@ sudo apt install python3 python3-pip
 pip3 install --user numpy pygame
 
 """
-# Math
+# NumPy for math
 import numpy as np
 
-# Visualization
-import os; os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
+# PyGame for visualization / GUI
+import os
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 try:
     # For mobile devices
     import pygame_sdl2 as pygame
@@ -51,9 +52,9 @@ nt = np.inf
 
 # State initial condition
 u = None  # displacement
-v = None  # time derivative
-U = None  # spatial gradient
-r = None  # material
+v = None  # displacement time-derivative (velocity)
+U = None  # displacement space-gradient
+r = None  # material coordinates
 def initialize():
     global u, v, U, r
     u = np.zeros((nx, ny, 2), float)
@@ -311,7 +312,7 @@ while running:
     S[:, :, [[0, 1]], [[0, 1]]] += (s*k/((1.0+k)*(1.0-2.0*k))) * trace(E)
 
     # Acceleration from conservation of momentum
-    a = g*f + (divergence(S) - c*v)/m #- np.einsum("ijkl,ijl->ijk", jacobian(v), v)  # convection term?
+    a = g*f + (divergence(S) - c*v)/m
 
     # Temporal integration
     v += a*dt

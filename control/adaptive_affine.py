@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Affine Adaptive Control:
+Adaptive Affine Control:
 My favorite myopic (not MPC, DP, or RL) control-law when absolutely nothing is known about your system except
 that the control is additive and fully-actuated:
 ```
