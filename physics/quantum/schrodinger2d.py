@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 """
 Fun with the Schrodinger equation!
 
@@ -45,8 +45,8 @@ fps = 30
 
 # Initial wave function, Gaussian packet with momentum
 F = np.zeros((2, Lx, Ly), dtype=np.float64)
-for x in xrange(Lx):
-    for y in xrange(Ly):
+for x in range(Lx):
+    for y in range(Ly):
         gauss = np.exp(-0.5*np.sqrt(5*((x-Lx/2)**2+(y-Ly/6)**2) - 100j*y))
         F[:, x, y] = np.real(gauss), np.imag(gauss)
 F = normalize(F)
@@ -60,7 +60,7 @@ V[:, -5:] = 100
 # Dissipation function on boundaries to effectively "open the box"
 B = np.zeros((Lx, Ly), dtype=np.float64)
 bthick = 10
-for i in xrange(bthick):
+for i in range(bthick):
     s = 50*(i/bthick)**3
     B[bthick-1-i, :] = s
     B[-(bthick-1-i)-1, :] = s
@@ -82,7 +82,7 @@ def cdisp(name, F, V, auto=True):
 
 # Recording tools
 record = False
-if record: recorder = cv2.VideoWriter('quantum.avi', cv2.cv.CV_FOURCC(*'XVID'), fps, imshow_size)
+if record: recorder = cv2.VideoWriter('schrodinger2d.avi', cv2.cv.CV_FOURCC(*'XVID'), fps, imshow_size)
 
 # Simulation
 last_draw = 0

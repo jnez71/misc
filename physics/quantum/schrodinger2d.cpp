@@ -1,8 +1,8 @@
 /*************************************************
 Solving the Schrodinger Equation in 2D because why not? This is a rewrite
-of quantum.py in C++. To compile with g++ and then run on Linux, first
+of schrodinger2d.py in C++. To compile with g++ and then run on Linux, first
 install OpenCV, then navigate to this directory and do:
-    mkdir -p build && g++ quantum.cpp `pkg-config --libs opencv` -o build/quantum -std=c++11 -O3 -ffast-math -march=native && build/quantum
+    mkdir -p build && g++ schrodinger2d.cpp `pkg-config --libs opencv` -o build/schrodinger2d -std=c++11 -O3 -ffast-math -march=native && build/schrodinger2d
 *************************************************/
 #include <iostream> // for giving user instructions and debugging
 #include <chrono> // for timing

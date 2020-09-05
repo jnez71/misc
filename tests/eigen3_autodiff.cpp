@@ -1,9 +1,9 @@
 /*
 Demonstrate the Eigen automatic differentiation module by training a multilayer perceptron (fully-connected feedforward neural-network).
-Python2.7 and matplotlib are used for plotting the results.
+Python3.8 and matplotlib are used for plotting the results.
 Compile with:
-    g++ autodiff.cpp -o autodiff -std=c++11 -O3 -ffast-math -I /usr/include/eigen3/ -I /usr/local/include/matplotlib-cpp.h -I /usr/include/python2.7 -l python2.7
-    ./autodiff 0.01 5  # step hidden_layer1_size hidden_layer2_size ...
+    g++ eigen3_autodiff.cpp -o eigen3_autodiff -std=c++11 -O3 -ffast-math -I /usr/include/eigen3/ -I /usr/local/include/matplotlib-cpp.h -I /usr/include/python3.8 -l python3.8
+    ./eigen3_autodiff 0.01 5  # step hidden_layer1_size hidden_layer2_size ...
 */
 #include <iostream>
 #include <vector>
@@ -14,9 +14,9 @@ namespace pyplot = matplotlibcpp;
 
 ////////////////////////////////////////////////// ALIASES
 
-using Jet = Eigen::AutoDiffScalar<Eigen::Matrix<double, 1, Eigen::Dynamic>>; // real number with many dual parts
-using Jetvec = Eigen::Matrix<Jet, Eigen::Dynamic, 1>;                        // vector of jets
-using Jetmat = Eigen::Matrix<Jet, Eigen::Dynamic, Eigen::Dynamic>;           // matrix of jets
+using Jet = Eigen::AutoDiffScalar<Eigen::VectorXd>;                // real number with many dual parts
+using Jetvec = Eigen::Matrix<Jet, Eigen::Dynamic, 1>;              // vector of jets
+using Jetmat = Eigen::Matrix<Jet, Eigen::Dynamic, Eigen::Dynamic>; // matrix of jets
 
 ////////////////////////////////////////////////// HELPERS
 
