@@ -84,16 +84,15 @@ s = 1e6
 k = 0.0
 
 # Mass density
-m = 1e3
+m = 0.1 / dx**2
 
 # Damping density
-c = 3e2*m
+c = 4.0 / dx**2
 
 ################################################## OPERATORS
 
 # Computes the jacobian of the given vector field
 def jacobian(u):
-    # dx, dy = 1, 1
     ux_x, ux_y = np.gradient(u[:, :, 0], dx, dy)
     uy_x, uy_y = np.gradient(u[:, :, 1], dx, dy)
     return np.reshape(np.dstack((ux_x, ux_y, uy_x, uy_y)),
@@ -101,7 +100,6 @@ def jacobian(u):
 
 # Computes the divergence of the given 2-tensor field
 def divergence(F):
-    # dx, dy = 1, 1
     Fxx_x = np.gradient(F[:, :, 0, 0], dx, axis=0)
     Fxy_y = np.gradient(F[:, :, 0, 1], dy, axis=1)
     Fyx_x = np.gradient(F[:, :, 1, 0], dx, axis=0)
@@ -308,13 +306,13 @@ while running:
     show(u)
 
     # Green strain tensor
-    #E = U + transpose(U)  # linear term
-    #E += np.einsum("ijkl,ijkm->ijlm", U, U)  # quadratic term ?
-    #E /= 2.0  # engineering convention
+    E = U + transpose(U)  # linear term
+    # E += np.einsum("ijkl,ijkm->ijlm", U, U)  # quadratic term
+    E /= 2.0  # engineering convention
 
-    F = U + np.identity(2, float)
-    C = np.einsum("xyji,xyjk->xyik", F, F)
-    E = (C - np.identity(2, float)) / 2.0
+    #F = U + np.identity(2, float)
+    #C = np.einsum("xyji,xyjk->xyik", F, F)
+    #E = (C - np.identity(2, float)) / 2.0
 
     # Cauchy stress tensor
     # (https://en.wikipedia.org/wiki/Hooke%27s_law#Linear_elasticity_theory_for_continuous_media)
