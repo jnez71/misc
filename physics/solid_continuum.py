@@ -58,6 +58,11 @@ r = None  # material coordinates
 def initialize():
     global u, v, U, r
     u = np.zeros((nx, ny, 2), float)
+
+    a = np.deg2rad(0)
+    R = np.array([[np.cos(a),-np.sin(a)],[np.sin(a),np.cos(a)]], float)
+    u = np.einsum("ij,xyj->xyi", R, xy - np.array([lx/2, ly/2], float)) - xy + np.array([lx/2, ly/2], float)
+
     v = np.zeros((nx, ny, 2), float)
     U = np.zeros((nx, ny, 2, 2), float)
     r = xy.copy()
@@ -76,29 +81,31 @@ for i in range(nx):
 s = 1e6
 
 # Poisson's ratio (contractivity)
-k = 0.15
+k = 0.0
 
 # Mass density
-m = 0.1
+m = 1e3
 
 # Damping density
-c = 4.0
+c = 3e2*m
 
 ################################################## OPERATORS
 
 # Computes the jacobian of the given vector field
 def jacobian(u):
-    ux_x, ux_y = np.gradient(u[:, :, 0])
-    uy_x, uy_y = np.gradient(u[:, :, 1])
+    # dx, dy = 1, 1
+    ux_x, ux_y = np.gradient(u[:, :, 0], dx, dy)
+    uy_x, uy_y = np.gradient(u[:, :, 1], dx, dy)
     return np.reshape(np.dstack((ux_x, ux_y, uy_x, uy_y)),
                       (u.shape[0], u.shape[1], u.shape[2], u.shape[2]))
 
 # Computes the divergence of the given 2-tensor field
 def divergence(F):
-    Fxx_x = np.gradient(F[:, :, 0, 0], axis=0)
-    Fxy_y = np.gradient(F[:, :, 0, 1], axis=1)
-    Fyx_x = np.gradient(F[:, :, 1, 0], axis=0)
-    Fyy_y = np.gradient(F[:, :, 1, 1], axis=1)
+    # dx, dy = 1, 1
+    Fxx_x = np.gradient(F[:, :, 0, 0], dx, axis=0)
+    Fxy_y = np.gradient(F[:, :, 0, 1], dy, axis=1)
+    Fyx_x = np.gradient(F[:, :, 1, 0], dx, axis=0)
+    Fyy_y = np.gradient(F[:, :, 1, 1], dy, axis=1)
     return np.dstack((Fxx_x+Fxy_y, Fyx_x+Fyy_y))
 
 # Returns the transpose of the given 2-tensor field
@@ -125,7 +132,7 @@ def bound():
     if mode == 0:
         fixed = np.s_[0, :]
     elif mode == 1:
-        fixed = np.s_[nx//2-3:nx//2+3, ny//2-3:ny//2+3]
+        fixed = np.s_[nx//2-0:nx//2+0, ny//2-0:ny//2+0]
     u[fixed] = 0.0
     v[fixed] = 0.0
     # Compute spatial gradient
@@ -140,7 +147,7 @@ def bound():
     r = u + xy
 
 modes = ["beam", "pinned"]
-mode = 0
+mode = 1
 
 # The judge decides the score
 np.random.seed(0)
@@ -157,8 +164,8 @@ rate = 60  # updates per real second
 mat = (300*nx/ny, 300)  # rectangular shape of material
 env = (1000, 1500)  # rectangular shape of ambient environment
 res = 16  # material grid resolution
-xgrab, ygrab = 4, 4  # shape of sub-block grabbable by user
-pretty = True  # whether or not to use pretty colors
+xgrab, ygrab = 1, 1  # shape of sub-block grabbable by user
+pretty = False  # whether or not to use pretty colors
 fontsize = 25  # size of font in pixels for drawn text
 
 # Initialize display
@@ -200,11 +207,11 @@ def show(u):
     # Textual information
     image = font.render("    score: {}".format(score), True, (255, 255, 0, 255))
     display.blit(image, (10, 0))
-    for i, text in enumerate(("stiffness: {}".format(s/1e3),
+    for i, text in enumerate(("stiffness: {}".format(s),
                               "squeeeesh: {}".format(k),
                               "  inertia: {}".format(m),
                               "  damping: {}".format(c),
-                              "  gravity: {}".format(g/1e3),
+                              "  gravity: {}".format(g),
                               "   v_grab: {}".format(xgrab-1),
                               "   h_grab: {}".format(ygrab-1),
                               "     mode: {}".format(modes[mode]))):
@@ -273,15 +280,15 @@ while running:
                 action = -1
     # Apply menu action
     if menu == 0:
-        s = np.round(np.clip(s + action*5e4, 0.0, 2e6), 6)
+        s = np.round(s + action*5e4, 6)
     elif menu == 1:
-        k = np.round(np.clip(k + action*0.05, -0.4, 0.4), 6)
+        k = np.round(k + action*0.05, 6)
     elif menu == 2:
-        m = np.round(np.clip(m + action*0.1, 0.05, 10.0), 6)
+        m = np.round(m + action*0.1, 6)
     elif menu == 3:
-        c = np.round(np.clip(c + action*0.1, 0.0, 10.0), 6)
+        c = np.round(c + action*0.1, 6)
     elif menu == 4:
-        g = np.round(np.clip(g + action*1e3, -3e3, 1e4), 6)
+        g = np.round(g + action*1e3, 6)
     elif menu == 5:
         xgrab = int(np.clip(xgrab + action, 0, res))
     elif menu == 6:
@@ -301,10 +308,13 @@ while running:
     show(u)
 
     # Green strain tensor
-    # (https://www.continuummechanics.org/greenstrain.html)
-    E = U + transpose(U)  # linear term
+    #E = U + transpose(U)  # linear term
     #E += np.einsum("ijkl,ijkm->ijlm", U, U)  # quadratic term ?
-    E /= 2.0  # engineering convention
+    #E /= 2.0  # engineering convention
+
+    F = U + np.identity(2, float)
+    C = np.einsum("xyji,xyjk->xyik", F, F)
+    E = (C - np.identity(2, float)) / 2.0
 
     # Cauchy stress tensor
     # (https://en.wikipedia.org/wiki/Hooke%27s_law#Linear_elasticity_theory_for_continuous_media)
